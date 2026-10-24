@@ -9,8 +9,8 @@ use std::time::Instant;
 use tauri::Manager;
 use tokio_util::sync::CancellationToken;
 
-use mc_dl_engine::runner::{TaskSnapshot, TaskSpec, TaskStatus};
 use mc_dl_engine::manifest::VersionSummary;
+use mc_dl_engine::runner::{TaskSnapshot, TaskSpec, TaskStatus};
 
 use crate::settings::{AppSettings, DownloadsFile, TaskRecord};
 use crate::AppError;

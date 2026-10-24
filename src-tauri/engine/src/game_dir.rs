@@ -158,7 +158,11 @@ impl PathGuard {
         }
     }
 
-    fn split_tail(&self, anc_canon: PathBuf, tail_parts: &[std::ffi::OsString]) -> (PathBuf, PathBuf) {
+    fn split_tail(
+        &self,
+        anc_canon: PathBuf,
+        tail_parts: &[std::ffi::OsString],
+    ) -> (PathBuf, PathBuf) {
         let mut full = anc_canon.clone();
         for part in tail_parts.iter().rev() {
             full.push(part);
@@ -217,7 +221,10 @@ mod tests {
         let a = make_game(&tmp.path().join("aaa"));
         let b = make_game(&tmp.path().join("bbb"));
         let err = detect_game_dir(tmp.path()).unwrap_err();
-        assert!(err.contains(a.to_string_lossy().as_ref()) && err.contains(b.to_string_lossy().as_ref()));
+        assert!(
+            err.contains(a.to_string_lossy().as_ref())
+                && err.contains(b.to_string_lossy().as_ref())
+        );
     }
 
     #[test]
@@ -250,6 +257,8 @@ mod tests {
         let target = assets.join("objects").join("ab").join("cdef");
         assert!(guard.ensure_within(tmp.path(), &target).is_err());
         // 正常路径应通过
-        assert!(guard.ensure_within(tmp.path(), &tmp.path().join("versions/1.20.1/1.20.1.jar")).is_ok());
+        assert!(guard
+            .ensure_within(tmp.path(), &tmp.path().join("versions/1.20.1/1.20.1.jar"))
+            .is_ok());
     }
 }

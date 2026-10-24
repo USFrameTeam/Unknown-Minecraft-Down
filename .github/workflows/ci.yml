@@ -5,6 +5,10 @@ on:
     branches: [main, master]
   pull_request:
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   rust:
     name: Rust（引擎 + 应用层）
@@ -44,7 +48,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install
+          cache: npm
+      - run: npm ci
       - name: 类型检查 + 构建
         run: npm run build
       - name: Vitest

@@ -11,10 +11,7 @@ use crate::state::AppState;
 use crate::AppError;
 
 fn canonical_display(p: std::path::PathBuf) -> String {
-    std::fs::canonicalize(&p)
-        .unwrap_or(p)
-        .display()
-        .to_string()
+    std::fs::canonicalize(&p).unwrap_or(p).display().to_string()
 }
 
 /// `detect_game_dir(selected_path) -> PathBuf`：
@@ -32,7 +29,7 @@ pub fn detect_game_dir(selected_path: String) -> Result<String, AppError> {
 pub fn probe_default_dir() -> Result<Option<String>, AppError> {
     Ok(default_game_dir()
         .filter(|p| p.is_dir())
-        .map(|p| canonical_display(p)))
+        .map(canonical_display))
 }
 
 /// 把用户指定的空文件夹初始化为新的 .minecraft（versions/assets/libraries）。
@@ -62,7 +59,10 @@ pub fn detect_java() -> Result<Option<String>, AppError> {
 }
 
 #[tauri::command]
-pub fn save_settings(state: State<'_, AppState>, mut settings: AppSettings) -> Result<(), AppError> {
+pub fn save_settings(
+    state: State<'_, AppState>,
+    mut settings: AppSettings,
+) -> Result<(), AppError> {
     settings.normalize();
     settings.concurrency = settings.concurrency.clamp(1, 32);
     for dir in settings.game_dirs.iter() {

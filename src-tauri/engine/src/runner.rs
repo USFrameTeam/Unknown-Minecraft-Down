@@ -18,8 +18,7 @@ use crate::game_dir::{ensure_game_skeleton, safe_join, PathGuard};
 use crate::mirror::Mirror;
 use crate::plan::{expand_asset_jobs, validate_plan_paths, FileJob};
 use crate::version_json::{
-    load_or_fetch_version_json, resolve_version, ChainEntry, ManifestHandle, OsContext,
-    VersionJson,
+    load_or_fetch_version_json, resolve_version, ChainEntry, ManifestHandle, OsContext, VersionJson,
 };
 use crate::{EngineError, Result};
 
@@ -79,8 +78,13 @@ pub struct TaskSnapshot {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum VersionSource {
-    Vanilla { id: String },
-    Fabric { mc_version: String, loader_version: String },
+    Vanilla {
+        id: String,
+    },
+    Fabric {
+        mc_version: String,
+        loader_version: String,
+    },
     Forge {
         mc_version: String,
         forge_version: String,
@@ -231,7 +235,11 @@ impl Runtime {
             let dt = t.duration_since(w.last_time).as_secs_f64().max(0.2);
             let raw = ((now_bytes as f64) - (w.last_bytes as f64)).max(0.0) / dt;
             // 指数平滑，避免速度数字跳动
-            w.bps = if w.bps == 0.0 { raw } else { 0.6 * w.bps + 0.4 * raw };
+            w.bps = if w.bps == 0.0 {
+                raw
+            } else {
+                0.6 * w.bps + 0.4 * raw
+            };
             w.last_time = t;
             w.last_bytes = now_bytes;
             w.bps as u64
@@ -381,9 +389,7 @@ async fn run_inner(
             let builds = crate::forge::fetch_forge_builds(&client, mc_version).await?;
             let build = builds
                 .into_iter()
-                .find(|b| {
-                    &b.version == forge_version && b.branch.as_deref() == branch.as_deref()
-                })
+                .find(|b| &b.version == forge_version && b.branch.as_deref() == branch.as_deref())
                 .ok_or_else(|| {
                     EngineError::VersionNotFound(format!(
                         "Forge {mc_version}-{forge_version} 不在构建列表中"
@@ -407,7 +413,10 @@ async fn run_inner(
     // 落盘链上所有版本 JSON（保持与来源字节一致，启动器依赖它们解析继承）
     for e in &chain.entries {
         let Some(raw) = &e.raw else { continue };
-        let dest = safe_join(&game_dir, &format!("versions/{}/{}.json", e.json.id, e.json.id))?;
+        let dest = safe_join(
+            &game_dir,
+            &format!("versions/{}/{}.json", e.json.id, e.json.id),
+        )?;
         write_if_changed(&dest, raw.as_bytes()).await?;
     }
 
@@ -422,7 +431,8 @@ async fn run_inner(
     }
     validate_plan_paths(&plan, &game_dir)?;
     rt.total_bytes.store(plan.total_bytes, Ordering::Relaxed);
-    rt.files_total.store(plan.jobs.len() as u64, Ordering::Relaxed);
+    rt.files_total
+        .store(plan.jobs.len() as u64, Ordering::Relaxed);
 
     // ---- 阶段 3：阶段 A 文件任务（client jar / libraries / natives jar / 索引）----
     rt.set_stage(Stage::Libraries);
@@ -440,11 +450,9 @@ async fn run_inner(
     cancel_err(cancel)?;
     let idx_meta = &chain.asset_index;
     let index_path = safe_join(&game_dir, &format!("assets/indexes/{}.json", idx_meta.id))?;
-    let index_text = tokio::fs::read_to_string(&index_path)
-        .await
-        .map_err(|e| {
-            EngineError::Custom(format!("资产索引缺失（{}）: {e}", index_path.display()))
-        })?;
+    let index_text = tokio::fs::read_to_string(&index_path).await.map_err(|e| {
+        EngineError::Custom(format!("资产索引缺失（{}）: {e}", index_path.display()))
+    })?;
     let (asset_jobs, asset_total, copies) =
         expand_asset_jobs(&index_text, &idx_meta.id, spec.mirror)?;
     rt.total_bytes.fetch_add(asset_total, Ordering::Relaxed);
@@ -637,7 +645,9 @@ async fn run_file_job(
 
     // 修正累计字节：补上“已存在的完整文件/续传前缀”未被 progress 统计的部分
     let full = job.size.unwrap_or_else(|| {
-        std::fs::metadata(&dest).map(|m| m.len()).unwrap_or(bytes_now)
+        std::fs::metadata(&dest)
+            .map(|m| m.len())
+            .unwrap_or(bytes_now)
     });
     rt.downloaded
         .fetch_add(full.saturating_sub(bytes_now), Ordering::Relaxed);
@@ -659,8 +669,12 @@ pub fn extract_natives(game_dir: &std::path::Path, ne: &crate::plan::NativeExtra
     let dest_root = safe_join(game_dir, &ne.dest_dir)?;
     std::fs::create_dir_all(&dest_root)?;
 
-    let file = std::fs::File::open(&jar_path)
-        .map_err(|e| EngineError::Custom(format!("打开 natives jar 失败（{}）: {e}", jar_path.display())))?;
+    let file = std::fs::File::open(&jar_path).map_err(|e| {
+        EngineError::Custom(format!(
+            "打开 natives jar 失败（{}）: {e}",
+            jar_path.display()
+        ))
+    })?;
     let mut zip = zip::ZipArchive::new(file)
         .map_err(|e| EngineError::Custom(format!("读取 natives jar 失败: {e}")))?;
     let guard = PathGuard::new();

@@ -272,7 +272,13 @@ pub fn parse_maven_name(name: &str) -> Result<MavenRef> {
         Some(c) => format!("{artifact}-{version}-{c}.{ext}"),
         None => format!("{artifact}-{version}.{ext}"),
     };
-    let path = format!("{}/{}/{}/{}", group.replace('.', "/"), artifact, version, file);
+    let path = format!(
+        "{}/{}/{}/{}",
+        group.replace('.', "/"),
+        artifact,
+        version,
+        file
+    );
     Ok(MavenRef {
         path,
         classifier,
@@ -294,7 +300,7 @@ pub const MOJANG_LIB_BASE: &str = "https://libraries.minecraft.net/";
 /// 取 library 的下载 artifact。
 /// - 新式 `downloads`：主 artifact 或 classifiers[classifier]；
 /// - 旧式：`url`（默认官方库仓库）+ maven 坐标拼接；
-/// `downloads` 存在但无匹配 classifier 时返回 `None`（该库对当前平台不适用）。
+///   `downloads` 存在但无匹配 classifier 时返回 `None`（该库对当前平台不适用）。
 pub fn library_artifact(
     lib: &Library,
     ctx: &OsContext,
@@ -327,7 +333,11 @@ pub fn library_artifact_with_base(
     };
     let maven = parse_maven_name(&full_name)?;
     let base = lib.url.clone().unwrap_or_else(|| default_base.to_string());
-    let base = if base.ends_with('/') { base } else { format!("{base}/") };
+    let base = if base.ends_with('/') {
+        base
+    } else {
+        format!("{base}/")
+    };
     Ok(Some(Artifact {
         path: Some(maven.path),
         url: format!("{base}{}", maven_name_path(&full_name)),
@@ -337,9 +347,7 @@ pub fn library_artifact_with_base(
 }
 
 fn maven_name_path(name: &str) -> String {
-    parse_maven_name(name)
-        .map(|m| m.path)
-        .unwrap_or_default()
+    parse_maven_name(name).map(|m| m.path).unwrap_or_default()
 }
 
 // ---------------------------------------------------------------------------
@@ -391,8 +399,7 @@ impl<'a> ManifestHandle<'a> {
     pub async fn index(&self) -> Result<&HashMap<String, VersionSummary>> {
         self.cache
             .get_or_try_init(|| async {
-                let manifest =
-                    crate::manifest::fetch_manifest(self.client, self.mirror).await?;
+                let manifest = crate::manifest::fetch_manifest(self.client, self.mirror).await?;
                 Ok(manifest.into_index())
             })
             .await
@@ -465,10 +472,7 @@ pub async fn resolve_version(
     let mut seen: HashSet<String> = HashSet::new();
     seen.insert(requested_id.clone());
 
-    loop {
-        let Some(parent_id) = chain.last().and_then(|e| e.json.inherits_from.clone()) else {
-            break;
-        };
+    while let Some(parent_id) = chain.last().and_then(|e| e.json.inherits_from.clone()) {
         if !seen.insert(parent_id.clone()) {
             return Err(EngineError::Custom(format!(
                 "检测到 inheritsFrom 环: {parent_id}"
@@ -479,8 +483,8 @@ pub async fn resolve_version(
                 "inheritsFrom 继承链过深（>8），疑似异常版本 JSON".into(),
             ));
         }
-        let parent = load_or_fetch_version_json(client, mirror, game_dir, &parent_id, manifest)
-            .await?;
+        let parent =
+            load_or_fetch_version_json(client, mirror, game_dir, &parent_id, manifest).await?;
         chain.push(parent);
     }
     chain.reverse(); // 根在最前
@@ -558,12 +562,18 @@ mod tests {
         let rules = vec![
             Rule {
                 action: "allow".into(),
-                os: Some(OsRule { name: Some("osx".into()), arch: None }),
+                os: Some(OsRule {
+                    name: Some("osx".into()),
+                    arch: None,
+                }),
                 features: None,
             },
             Rule {
                 action: "allow".into(),
-                os: Some(OsRule { name: Some("linux".into()), arch: None }),
+                os: Some(OsRule {
+                    name: Some("linux".into()),
+                    arch: None,
+                }),
                 features: None,
             },
         ];
@@ -572,7 +582,10 @@ mod tests {
         // 仅允许 osx → linux 上所有规则都不命中 → 默认拒绝
         let rules = vec![Rule {
             action: "allow".into(),
-            os: Some(OsRule { name: Some("osx".into()), arch: None }),
+            os: Some(OsRule {
+                name: Some("osx".into()),
+                arch: None,
+            }),
             features: None,
         }];
         assert!(!evaluate_rules(Some(&rules), &c));
@@ -583,7 +596,10 @@ mod tests {
         let c = ctx(OsName::Windows, "x64");
         let rules = vec![Rule {
             action: "allow".into(),
-            os: Some(OsRule { name: Some("windows".into()), arch: Some("x86".into()) }),
+            os: Some(OsRule {
+                name: Some("windows".into()),
+                arch: Some("x86".into()),
+            }),
             features: None,
         }];
         assert!(!evaluate_rules(Some(&rules), &c));
@@ -608,12 +624,18 @@ mod tests {
         let rules = vec![
             Rule {
                 action: "allow".into(),
-                os: Some(OsRule { name: Some("windows".into()), arch: None }),
+                os: Some(OsRule {
+                    name: Some("windows".into()),
+                    arch: None,
+                }),
                 features: None,
             },
             Rule {
                 action: "deny".into(),
-                os: Some(OsRule { name: Some("windows".into()), arch: None }),
+                os: Some(OsRule {
+                    name: Some("windows".into()),
+                    arch: None,
+                }),
                 features: None,
             },
         ];
@@ -629,9 +651,15 @@ mod tests {
             ..Default::default()
         };
         let c = ctx(OsName::Windows, "x64");
-        assert_eq!(natives_classifier(&lib, &c), Some("natives-windows-64".into()));
+        assert_eq!(
+            natives_classifier(&lib, &c),
+            Some("natives-windows-64".into())
+        );
         let c32 = ctx(OsName::Windows, "x86");
-        assert_eq!(natives_classifier(&lib, &c32), Some("natives-windows-32".into()));
+        assert_eq!(
+            natives_classifier(&lib, &c32),
+            Some("natives-windows-32".into())
+        );
         let l = ctx(OsName::Linux, "x64");
         assert_eq!(natives_classifier(&lib, &l), None);
     }
@@ -648,7 +676,8 @@ mod tests {
             "net/java/jinput/jinput-platform/2.0.5/jinput-platform-2.0.5-natives-linux.jar"
         );
 
-        let m = parse_maven_name("com.twitch:twitch-platform:5.16:natives-windows-${arch}@zip").unwrap();
+        let m = parse_maven_name("com.twitch:twitch-platform:5.16:natives-windows-${arch}@zip")
+            .unwrap();
         assert_eq!(m.ext, "zip");
         assert!(m.path.ends_with(".zip"));
 
@@ -670,7 +699,10 @@ mod tests {
             "https://maven.fabricmc.net/org/lwjgl/lwjgl/lwjgl/3.1.6/lwjgl-3.1.6.jar"
         );
         // 无尾斜杠的 base 也要补上
-        let lib2 = Library { url: Some("https://maven.example.com".into()), ..lib.clone() };
+        let lib2 = Library {
+            url: Some("https://maven.example.com".into()),
+            ..lib.clone()
+        };
         let art2 = library_artifact(&lib2, &c, None).unwrap().unwrap();
         assert!(art2.url.starts_with("https://maven.example.com/"));
     }
@@ -680,7 +712,10 @@ mod tests {
         let lib = Library {
             name: Some("a:b:1.0".into()),
             downloads: Some(LibraryDownloads {
-                artifact: Some(Artifact { url: "https://x/a.jar".into(), ..Default::default() }),
+                artifact: Some(Artifact {
+                    url: "https://x/a.jar".into(),
+                    ..Default::default()
+                }),
                 classifiers: None,
             }),
             natives: Some(HashMap::from([("linux".into(), "natives-linux".into())])),
@@ -690,6 +725,8 @@ mod tests {
         // 主 artifact 可用
         assert!(library_artifact(&lib, &c, None).unwrap().is_some());
         // natives classifier 不存在 → None
-        assert!(library_artifact(&lib, &c, Some("natives-linux")).unwrap().is_none());
+        assert!(library_artifact(&lib, &c, Some("natives-linux"))
+            .unwrap()
+            .is_none());
     }
 }

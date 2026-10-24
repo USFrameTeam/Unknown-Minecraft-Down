@@ -77,18 +77,14 @@ pub async fn list_versions(
 
 /// Fabric Loader 版本列表（官方 meta.fabricmc.net）。
 #[tauri::command]
-pub async fn list_fabric_loaders(
-    mc_version: String,
-) -> Result<Vec<FabricLoaderSummary>, AppError> {
+pub async fn list_fabric_loaders(mc_version: String) -> Result<Vec<FabricLoaderSummary>, AppError> {
     let client = build_http_client()?;
     Ok(fetch_fabric_loaders(&client, &mc_version).await?)
 }
 
 /// Forge 构建列表（BMCLAPI，含安装器 SHA-1）。
 #[tauri::command]
-pub async fn list_forge_builds(
-    mc_version: String,
-) -> Result<Vec<ForgeBuildSummary>, AppError> {
+pub async fn list_forge_builds(mc_version: String) -> Result<Vec<ForgeBuildSummary>, AppError> {
     let client = build_http_client()?;
     let builds = mc_dl_engine::forge::fetch_forge_builds(&client, &mc_version).await?;
     Ok(builds.into_iter().map(Into::into).collect())
@@ -176,9 +172,7 @@ pub fn run_entry(app: &AppHandle, entry: Arc<TaskEntry>) {
         let mut last_persist = Instant::now() - persist_every;
         while let Some(mut snap) = rx.recv().await {
             // 暂停请求：把引擎的 Canceled 映射为 Paused
-            if snap.status == TaskStatus::Canceled
-                && entry.pause_requested.load(Ordering::SeqCst)
-            {
+            if snap.status == TaskStatus::Canceled && entry.pause_requested.load(Ordering::SeqCst) {
                 snap.status = TaskStatus::Paused;
             }
             *entry.snapshot.write().unwrap() = snap.clone();
@@ -235,7 +229,11 @@ pub fn get_download_state(
     state: State<'_, AppState>,
     task_id: String,
 ) -> Result<TaskSnapshot, AppError> {
-    Ok(get_entry(&state, &task_id)?.snapshot.read().unwrap().clone())
+    Ok(get_entry(&state, &task_id)?
+        .snapshot
+        .read()
+        .unwrap()
+        .clone())
 }
 
 #[tauri::command]

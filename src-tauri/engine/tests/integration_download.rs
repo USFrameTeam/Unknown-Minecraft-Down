@@ -101,7 +101,10 @@ async fn resume_continues_from_part_and_sends_range() {
     assert!(err.is_err(), "断流应导致失败: {err:?}");
     // .part 已保留断点
     let part_len = std::fs::metadata(part_path(&dest)).unwrap().len();
-    assert!(part_len >= cut - 128, "part 应保留断点字节，实际 {part_len}");
+    assert!(
+        part_len >= cut - 128,
+        "part 应保留断点字节，实际 {part_len}"
+    );
 
     // 第二轮：完好服务器，应发 Range 从断点续传
     let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
@@ -140,10 +143,18 @@ async fn resume_continues_from_part_and_sends_range() {
         resumed_from >= cut,
         "续传必须发送 Range 头且起点 ≥ 断点 {cut}，实际收到的请求头: {ranges:?}"
     );
-    assert_eq!(resumed_from + bytes_now, body.len() as u64, "断点偏移 + 续传字节 == 总大小");
+    assert_eq!(
+        resumed_from + bytes_now,
+        body.len() as u64,
+        "断点偏移 + 续传字节 == 总大小"
+    );
     assert!(dest.exists());
     assert!(!part_path(&dest).exists());
-    assert_eq!(hash_file(&dest).await.unwrap(), expect, "续传后整文件 SHA-1 必须一致");
+    assert_eq!(
+        hash_file(&dest).await.unwrap(),
+        expect,
+        "续传后整文件 SHA-1 必须一致"
+    );
 }
 
 #[tokio::test]
@@ -174,7 +185,10 @@ async fn sha1_mismatch_retries_then_fails_and_cleans_part() {
     )
     .await
     .unwrap_err();
-    assert!(matches!(err, mc_dl_engine::EngineError::Sha1Mismatch { .. }), "{err}");
+    assert!(
+        matches!(err, mc_dl_engine::EngineError::Sha1Mismatch { .. }),
+        "{err}"
+    );
     // 重试 MAX_ATTEMPTS 次（1 次请求只发生在最后一次失败后清理）
     assert!(!part_path(&dest).exists());
     assert!(!dest.exists());

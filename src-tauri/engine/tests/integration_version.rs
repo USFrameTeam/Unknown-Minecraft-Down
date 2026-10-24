@@ -135,7 +135,12 @@ async fn resolves_inherits_from_offline_and_merges() {
     // assetIndex 继承自父
     assert_eq!(chain.asset_index.id, "8");
     // mainClass 取子版本
-    assert!(chain.entries[1].json.main_class.as_deref().unwrap().contains("KnotClient"));
+    assert!(chain.entries[1]
+        .json
+        .main_class
+        .as_deref()
+        .unwrap()
+        .contains("KnotClient"));
 
     // libraries 合并：父 2 个 + 子 1 个新增，同名覆盖
     assert_eq!(chain.libraries.len(), 3);
@@ -145,23 +150,49 @@ async fn resolves_inherits_from_offline_and_merges() {
         .find(|l| l.name.as_deref() == Some("com.mojang:brigadier:1.0.18"))
         .unwrap();
     assert_eq!(
-        brigadier.downloads.as_ref().unwrap().artifact.as_ref().unwrap().sha1.as_deref(),
+        brigadier
+            .downloads
+            .as_ref()
+            .unwrap()
+            .artifact
+            .as_ref()
+            .unwrap()
+            .sha1
+            .as_deref(),
         Some("OVER-RIDDEN"),
         "同名库必须被子版本覆盖"
     );
 
     // 由合并结果构建下载计划（linux 上下文：父的 windows natives 库应被规则剔除）
-    let ctx = OsContext { os: OsName::Linux, arch: "x64", features: HashMap::new() };
+    let ctx = OsContext {
+        os: OsName::Linux,
+        arch: "x64",
+        features: HashMap::new(),
+    };
     let plan = mc_dl_engine::plan::build_plan(&chain, Mirror::Official, &ctx).unwrap();
     assert_eq!(plan.version_id, "fabric-loader-0.16.9-1.20.1");
-    assert_eq!(plan.chain_ids, vec!["1.20.1", "fabric-loader-0.16.9-1.20.1"]);
+    assert_eq!(
+        plan.chain_ids,
+        vec!["1.20.1", "fabric-loader-0.16.9-1.20.1"]
+    );
     // client jar(1) + brigadier(1) + fabric-loader(1) + asset index(1) = 4
     assert_eq!(plan.jobs.len(), 4);
-    let jar = plan.jobs.iter().find(|j| j.dest.ends_with(".jar") && j.dest.contains("versions/")).unwrap();
-    assert_eq!(jar.dest, "versions/1.20.1/1.20.1.jar", "继承版本的客户端 jar 放在父版本目录");
+    let jar = plan
+        .jobs
+        .iter()
+        .find(|j| j.dest.ends_with(".jar") && j.dest.contains("versions/"))
+        .unwrap();
+    assert_eq!(
+        jar.dest, "versions/1.20.1/1.20.1.jar",
+        "继承版本的客户端 jar 放在父版本目录"
+    );
     assert!(plan.jobs.iter().all(|j| !j.dest.contains("lwjgl")));
     // fabric 库应走 fabric maven 且映射时不改域名
-    let fabric = plan.jobs.iter().find(|j| j.dest.contains("fabric-loader")).unwrap();
+    let fabric = plan
+        .jobs
+        .iter()
+        .find(|j| j.dest.contains("fabric-loader"))
+        .unwrap();
     assert_eq!(
         fabric.url,
         "https://maven.fabricmc.net/net/fabricmc/fabric-loader/0.16.9/fabric-loader-0.16.9.jar"
@@ -176,9 +207,12 @@ async fn detects_inherits_from_cycle() {
     for (id, v) in [("a", &a), ("b", &b)] {
         let p = dir.path().join(format!("versions/{id}"));
         tokio::fs::create_dir_all(&p).await.unwrap();
-        tokio::fs::write(p.join(format!("{id}.json")), serde_json::to_vec(&v).unwrap())
-            .await
-            .unwrap();
+        tokio::fs::write(
+            p.join(format!("{id}.json")),
+            serde_json::to_vec(&v).unwrap(),
+        )
+        .await
+        .unwrap();
     }
     let client = downloader::build_http_client().unwrap();
     let manifest = version_json::ManifestHandle::new(&client, Mirror::Official);
@@ -188,8 +222,9 @@ async fn detects_inherits_from_cycle() {
         source_url: None,
         manifest_sha1: None,
     };
-    let err = version_json::resolve_version(&client, Mirror::Official, dir.path(), entry, &manifest)
-        .await
-        .unwrap_err();
+    let err =
+        version_json::resolve_version(&client, Mirror::Official, dir.path(), entry, &manifest)
+            .await
+            .unwrap_err();
     assert!(err.to_string().contains("环"), "{err}");
 }

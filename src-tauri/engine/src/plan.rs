@@ -71,23 +71,16 @@ pub struct Plan {
 }
 
 /// 从继承链构建下载计划。
-pub fn build_plan(
-    chain: &ResolvedChain,
-    mirror: Mirror,
-    ctx: &OsContext,
-) -> Result<Plan> {
+pub fn build_plan(chain: &ResolvedChain, mirror: Mirror, ctx: &OsContext) -> Result<Plan> {
     let mut jobs: Vec<FileJob> = Vec::new();
 
     // 1) 客户端 jar
-    let client_jar = chain
-        .client_jar
-        .as_ref()
-        .ok_or_else(|| {
-            EngineError::Custom(format!(
-                "无法确定客户端 jar（链上 {} 缺少 downloads.client）",
-                chain.jar_id
-            ))
-        })?;
+    let client_jar = chain.client_jar.as_ref().ok_or_else(|| {
+        EngineError::Custom(format!(
+            "无法确定客户端 jar（链上 {} 缺少 downloads.client）",
+            chain.jar_id
+        ))
+    })?;
     jobs.push(FileJob {
         url: mirror.map_url(&client_jar.url)?,
         dest: format!("versions/{}/{}.jar", chain.jar_id, chain.jar_id),
@@ -138,8 +131,7 @@ pub fn build_plan(
         kind: FileKind::AssetIndex,
     });
 
-    let total_bytes = jobs.iter().filter_map(|j| j.size).sum::<u64>()
-        + idx.total_size.unwrap_or(0);
+    let total_bytes = jobs.iter().filter_map(|j| j.size).sum::<u64>() + idx.total_size.unwrap_or(0);
 
     Ok(Plan {
         version_id: chain.requested_id.clone(),
@@ -151,7 +143,11 @@ pub fn build_plan(
     })
 }
 
-fn artifact_job(art: &crate::version_json::Artifact, mirror: Mirror, kind: FileKind) -> Result<Option<FileJob>> {
+fn artifact_job(
+    art: &crate::version_json::Artifact,
+    mirror: Mirror,
+    kind: FileKind,
+) -> Result<Option<FileJob>> {
     if art.url.is_empty() {
         return Ok(None);
     }
@@ -267,7 +263,10 @@ pub fn validate_plan_paths(plan: &Plan, game_dir: &std::path::Path) -> Result<()
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::version_json::{Artifact, LibraryDownloads, VersionDownloads, VersionJson, AssetIndexMeta, Library, ChainEntry};
+    use crate::version_json::{
+        Artifact, AssetIndexMeta, ChainEntry, Library, LibraryDownloads, VersionDownloads,
+        VersionJson,
+    };
     use std::collections::HashMap;
 
     fn vanilla_chain() -> ResolvedChain {
@@ -341,7 +340,12 @@ mod tests {
             ..Default::default()
         };
         ResolvedChain {
-            entries: vec![ChainEntry { json: json.clone(), raw: None, source_url: None, manifest_sha1: None }],
+            entries: vec![ChainEntry {
+                json: json.clone(),
+                raw: None,
+                source_url: None,
+                manifest_sha1: None,
+            }],
             requested_id: "1.20.1".into(),
             jar_id: "1.20.1".into(),
             client_jar: json.downloads.as_ref().unwrap().client.clone(),
@@ -363,9 +367,16 @@ mod tests {
         assert_eq!(plan.jobs.len(), 3);
         assert!(plan.natives.is_empty());
         assert!(plan.jobs.iter().all(|j| !j.dest.contains("lwjgl")));
-        let jar_job = plan.jobs.iter().find(|j| j.kind == FileKind::ClientJar).unwrap();
+        let jar_job = plan
+            .jobs
+            .iter()
+            .find(|j| j.kind == FileKind::ClientJar)
+            .unwrap();
         assert_eq!(jar_job.dest, "versions/1.20.1/1.20.1.jar");
-        assert_eq!(jar_job.url, "https://piston-data.mojang.com/v1/objects/abc/client.jar");
+        assert_eq!(
+            jar_job.url,
+            "https://piston-data.mojang.com/v1/objects/abc/client.jar"
+        );
     }
 
     #[test]
@@ -377,7 +388,11 @@ mod tests {
             features: HashMap::new(),
         };
         let plan = build_plan(&chain, Mirror::Official, &ctx).unwrap();
-        let natives_jobs = plan.jobs.iter().filter(|j| j.kind == FileKind::NativesJar).count();
+        let natives_jobs = plan
+            .jobs
+            .iter()
+            .filter(|j| j.kind == FileKind::NativesJar)
+            .count();
         assert_eq!(natives_jobs, 1);
         assert_eq!(plan.natives.len(), 1);
         assert_eq!(plan.natives[0].dest_dir, "versions/1.20.1/natives");
@@ -406,8 +421,7 @@ mod tests {
             },
             "virtual": true
         }"#;
-        let (jobs, total, copies) =
-            expand_asset_jobs(index, "legacy", Mirror::Official).unwrap();
+        let (jobs, total, copies) = expand_asset_jobs(index, "legacy", Mirror::Official).unwrap();
         assert_eq!(jobs.len(), 2);
         assert_eq!(total, 30);
         // BTreeMap 顺序：lang < minecraft；大写 hash 归一化为小写路径
@@ -415,10 +429,19 @@ mod tests {
             jobs[0].dest,
             "assets/objects/bb/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
         );
-        assert_eq!(jobs[1].dest, "assets/objects/aa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-        assert_eq!(jobs[1].url, "https://resources.download.minecraft.net/aa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        assert_eq!(
+            jobs[1].dest,
+            "assets/objects/aa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        );
+        assert_eq!(
+            jobs[1].url,
+            "https://resources.download.minecraft.net/aa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        );
         assert_eq!(copies.len(), 2);
-        assert_eq!(copies[1].to_rel, "assets/virtual/legacy/minecraft/sounds/click.ogg");
+        assert_eq!(
+            copies[1].to_rel,
+            "assets/virtual/legacy/minecraft/sounds/click.ogg"
+        );
     }
 
     #[test]

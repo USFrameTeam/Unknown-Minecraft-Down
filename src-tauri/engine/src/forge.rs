@@ -81,7 +81,7 @@ pub async fn fetch_forge_builds(
     let url = format!("{FORGE_LIST_API}/{mc_version}");
     let resp = client.get(&url).send().await?.error_for_status()?;
     let mut builds = resp.json::<Vec<ForgeBuild>>().await?;
-    builds.sort_by(|a, b| b.build.cmp(&a.build));
+    builds.sort_by_key(|b| std::cmp::Reverse(b.build));
     Ok(builds)
 }
 
@@ -224,17 +224,20 @@ pub fn read_zip_entry(zip_path: &Path, entry: &str) -> Result<Vec<u8>> {
 }
 
 pub fn zip_entry_exists(zip_path: &Path, entry: &str) -> bool {
-    let Ok(file) = std::fs::File::open(zip_path) else { return false };
-    let Ok(mut zip) = zip::ZipArchive::new(file) else { return false };
-    let Ok(_entry) = zip.by_name(entry) else { return false };
+    let Ok(file) = std::fs::File::open(zip_path) else {
+        return false;
+    };
+    let Ok(mut zip) = zip::ZipArchive::new(file) else {
+        return false;
+    };
+    let Ok(_entry) = zip.by_name(entry) else {
+        return false;
+    };
     true
 }
 
 /// 读取安装器内嵌 version.json（install_profile.json 的 `json` 字段指向）。
-pub fn read_embedded_version_json(
-    installer: &Path,
-    profile: &InstallProfile,
-) -> Result<String> {
+pub fn read_embedded_version_json(installer: &Path, profile: &InstallProfile) -> Result<String> {
     let entry = profile
         .json
         .clone()
@@ -262,7 +265,9 @@ pub fn extract_embedded_maven(
         let Some(name) = &lib.name else { continue };
         let rel = maven_artifact_path(name);
         let entry = format!("maven/{rel}");
-        let Ok(mut e) = zip.by_name(&entry) else { continue };
+        let Ok(mut e) = zip.by_name(&entry) else {
+            continue;
+        };
         if e.is_dir() {
             continue;
         }
@@ -289,7 +294,9 @@ pub fn extract_embedded_maven(
 
 fn hash_file_sync(path: &Path) -> String {
     use sha1::{Digest, Sha1};
-    let Ok(mut f) = std::fs::File::open(path) else { return String::new() };
+    let Ok(mut f) = std::fs::File::open(path) else {
+        return String::new();
+    };
     let mut hasher = Sha1::new();
     let mut buf = vec![0u8; 128 * 1024];
     loop {
@@ -350,7 +357,10 @@ pub fn resolve_token(token: &str, ctx: &ProcessorCtx<'_>) -> Result<String> {
             "MINECRAFT_JAR" => {
                 return Ok(ctx
                     .game_dir
-                    .join(format!("versions/{}/{}.jar", ctx.mc_version, ctx.mc_version))
+                    .join(format!(
+                        "versions/{}/{}.jar",
+                        ctx.mc_version, ctx.mc_version
+                    ))
                     .display()
                     .to_string())
             }
@@ -358,9 +368,7 @@ pub fn resolve_token(token: &str, ctx: &ProcessorCtx<'_>) -> Result<String> {
                 .data
                 .get(name)
                 .map(|v| v.client.clone())
-                .ok_or_else(|| {
-                    EngineError::Custom(format!("install_profile 缺少 data[{name}]"))
-                })?,
+                .ok_or_else(|| EngineError::Custom(format!("install_profile 缺少 data[{name}]")))?,
         };
         return resolve_value(&value, ctx);
     }
@@ -371,7 +379,10 @@ pub fn resolve_token(token: &str, ctx: &ProcessorCtx<'_>) -> Result<String> {
 pub fn resolve_value(value: &str, ctx: &ProcessorCtx<'_>) -> Result<String> {
     if let Some(coord) = value.strip_prefix('[').and_then(|v| v.strip_suffix(']')) {
         let libraries = ctx.game_dir.join("libraries");
-        return Ok(libraries.join(maven_artifact_path(coord)).display().to_string());
+        return Ok(libraries
+            .join(maven_artifact_path(coord))
+            .display()
+            .to_string());
     }
     if let Some(lit) = value.strip_prefix('\'').and_then(|v| v.strip_suffix('\'')) {
         return Ok(lit.to_string());
@@ -413,10 +424,14 @@ pub fn locate_java(explicit: Option<&str>) -> Option<PathBuf> {
         }
     }
     let candidates: Vec<PathBuf> = if cfg!(windows) {
-        ["C:/Program Files/Java", "C:/Program Files/Eclipse Adoptium", "C:/Program Files/Microsoft"]
-            .iter()
-            .map(PathBuf::from)
-            .collect()
+        [
+            "C:/Program Files/Java",
+            "C:/Program Files/Eclipse Adoptium",
+            "C:/Program Files/Microsoft",
+        ]
+        .iter()
+        .map(PathBuf::from)
+        .collect()
     } else if cfg!(target_os = "macos") {
         vec![PathBuf::from("/Library/Java/JavaVirtualMachines")]
     } else {
@@ -514,7 +529,11 @@ pub async fn run_processor(
             "processor 失败（exit {}）：{}{}",
             out.status,
             stderr.trim(),
-            if stdout.trim().is_empty() { String::new() } else { format!("\nstdout: {}", stdout.trim()) }
+            if stdout.trim().is_empty() {
+                String::new()
+            } else {
+                format!("\nstdout: {}", stdout.trim())
+            }
         )));
     }
 
@@ -525,9 +544,7 @@ pub async fn run_processor(
             let expect = resolve_token(sha_tpl, ctx)?;
             let p = Path::new(&path);
             if !p.exists() {
-                return Err(EngineError::Custom(format!(
-                    "processor 未产出文件：{path}"
-                )));
+                return Err(EngineError::Custom(format!("processor 未产出文件：{path}")));
             }
             let actual = hash_file(p).await?;
             if !expect.is_empty() && actual != expect.to_lowercase() {
@@ -571,11 +588,7 @@ pub async fn run_client_processors(
 pub async fn ensure_launcher_profiles_stub(game_dir: &Path) -> Result<()> {
     let p = game_dir.join("launcher_profiles.json");
     if !p.exists() {
-        tokio::fs::write(
-            &p,
-            br#"{"profiles":{},"settings":{},"version":3}"#,
-        )
-        .await?;
+        tokio::fs::write(&p, br#"{"profiles":{},"settings":{},"version":3}"#).await?;
     }
     Ok(())
 }
@@ -589,7 +602,13 @@ pub fn installer_cache_dir(artifact_id: &str) -> PathBuf {
 
 fn sanitize_component(s: &str) -> String {
     s.chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '.' || c == '_' { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '.' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect()
 }
 
@@ -604,7 +623,8 @@ pub async fn fetch_forge_version_entry(
     cancel: &CancellationToken,
 ) -> Result<(ChainEntry, InstallProfile, PathBuf)> {
     let cache = installer_cache_dir(artifact_id);
-    let installer = fetch_installer(client, mirror, artifact_id, installer_sha1, &cache, cancel).await?;
+    let installer =
+        fetch_installer(client, mirror, artifact_id, installer_sha1, &cache, cancel).await?;
     let profile_text = String::from_utf8(read_zip_entry(&installer, "install_profile.json")?)
         .map_err(|_| EngineError::Custom("install_profile.json 不是有效 UTF-8".into()))?;
     let profile = parse_profile(&profile_text)?;
@@ -704,11 +724,17 @@ mod tests {
         let mut data = HashMap::new();
         data.insert(
             "MCP_VERSION".to_string(),
-            SideValue { client: "'20230612.114412'".into(), server: String::new() },
+            SideValue {
+                client: "'20230612.114412'".into(),
+                server: String::new(),
+            },
         );
         data.insert(
             "PATCHED".to_string(),
-            SideValue { client: "[net.minecraftforge:forge:1.20.1-47.3.0:client]".into(), server: String::new() },
+            SideValue {
+                client: "[net.minecraftforge:forge:1.20.1-47.3.0:client]".into(),
+                server: String::new(),
+            },
         );
         let c = ctx(dir.path(), &installer, &work, &data, "1.20.1");
         assert_eq!(resolve_token("{SIDE}", &c).unwrap(), "client");
@@ -717,7 +743,10 @@ mod tests {
             resolve_token("{LIBRARY_DIR}", &c).unwrap(),
             dir.path().join("libraries").display().to_string()
         );
-        assert_eq!(resolve_token("{MCP_VERSION}", &c).unwrap(), "20230612.114412");
+        assert_eq!(
+            resolve_token("{MCP_VERSION}", &c).unwrap(),
+            "20230612.114412"
+        );
         assert_eq!(
             resolve_token("{PATCHED}", &c).unwrap(),
             dir.path()
@@ -726,10 +755,7 @@ mod tests {
                 .to_string()
         );
         assert_eq!(resolve_token("--task", &c).unwrap(), "--task");
-        assert_eq!(
-            resolve_token("'literal text'", &c).unwrap(),
-            "literal text"
-        );
+        assert_eq!(resolve_token("'literal text'", &c).unwrap(), "literal text");
         // 未知 token → 报错
         assert!(resolve_token("{UNKNOWN}", &c).is_err());
     }
@@ -781,7 +807,11 @@ mod tests {
         assert!(p.processors[0].runs_on_client());
         assert!(!p.processors[1].runs_on_client());
         assert!(p.has_client_processors());
-        assert!(!InstallProfile { processors: vec![], ..parse_profile(text).unwrap() }.has_client_processors());
+        assert!(!InstallProfile {
+            processors: vec![],
+            ..parse_profile(text).unwrap()
+        }
+        .has_client_processors());
 
         // downloads.artifact 直接采用；无 url 的旧式库默认走 forge maven
         let dir = tempfile::tempdir().unwrap();
@@ -791,14 +821,22 @@ mod tests {
             jobs_off[0].url,
             "https://maven.minecraftforge.net/com/github/jponge/lzma-java/1.3/lzma-java-1.3.jar"
         );
-        assert_eq!(jobs_off[0].dest, "libraries/com/github/jponge/lzma-java/1.3/lzma-java-1.3.jar");
+        assert_eq!(
+            jobs_off[0].dest,
+            "libraries/com/github/jponge/lzma-java/1.3/lzma-java-1.3.jar"
+        );
         assert_eq!(
             jobs_off[1].url,
             "https://maven.minecraftforge.net/de/oceanlabs/mcp/mcp_config/1.20.1-20230612.114412/mcp_config-1.20.1-20230612.114412.zip"
         );
-        assert_eq!(jobs_off[1].sha1.as_deref(), Some("c7d29380ddb38becad7c0819b5b325e43bca23f0"));
+        assert_eq!(
+            jobs_off[1].sha1.as_deref(),
+            Some("c7d29380ddb38becad7c0819b5b325e43bca23f0")
+        );
         let jobs_bm = profile_library_jobs(&p, Mirror::Bmclapi, dir.path()).unwrap();
-        assert!(jobs_bm[0].url.starts_with("https://bmclapi2.bangbang93.com/maven/"));
+        assert!(jobs_bm[0]
+            .url
+            .starts_with("https://bmclapi2.bangbang93.com/maven/"));
     }
 
     #[test]
@@ -849,7 +887,10 @@ mod tests {
         let c = ctx(dir.path(), &installer, &work, &data, "1.20.1");
         assert_eq!(
             resolve_token("{MINECRAFT_JAR}", &c).unwrap(),
-            dir.path().join("versions/1.20.1/1.20.1.jar").display().to_string()
+            dir.path()
+                .join("versions/1.20.1/1.20.1.jar")
+                .display()
+                .to_string()
         );
     }
 

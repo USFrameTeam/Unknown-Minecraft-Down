@@ -18,19 +18,17 @@ fn sha1_hex(data: &[u8]) -> String {
     hex::encode(h.finalize())
 }
 
-fn single_file_server(body: Vec<u8>) -> impl std::future::Future<Output = std::net::SocketAddr> {
-    async move {
-        ts::spawn(
-            body,
-            ts::ServerOpts {
-                support_range: true,
-                truncate_after: None,
-                seen_ranges: Arc::new(std::sync::Mutex::new(vec![])),
-            },
-        )
-        .await
-        .addr
-    }
+async fn single_file_server(body: Vec<u8>) -> std::net::SocketAddr {
+    ts::spawn(
+        body,
+        ts::ServerOpts {
+            support_range: true,
+            truncate_after: None,
+            seen_ranges: Arc::new(std::sync::Mutex::new(vec![])),
+        },
+    )
+    .await
+    .addr
 }
 
 async fn download_to(server: std::net::SocketAddr, body: &[u8], dest: &std::path::Path) {
@@ -110,13 +108,27 @@ async fn verify_reports_missing_and_corrupted_accurately() {
         serde_json::to_vec(&version_json).unwrap(),
     )
     .unwrap();
-    download_to(s_jar, &client_jar, &game.join("versions/t1.20.1/t1.20.1.jar")).await;
-    download_to(s_lib, &lib, &game.join("libraries/com/test/lib/1.0/lib-1.0.jar")).await;
+    download_to(
+        s_jar,
+        &client_jar,
+        &game.join("versions/t1.20.1/t1.20.1.jar"),
+    )
+    .await;
+    download_to(
+        s_lib,
+        &lib,
+        &game.join("libraries/com/test/lib/1.0/lib-1.0.jar"),
+    )
+    .await;
     download_to(s_index, &index_body, &game.join("assets/indexes/t8.json")).await;
     download_to(
         s_asset,
         &asset,
-        &game.join(format!("assets/objects/{}/{}", &asset_hash[..2], asset_hash)),
+        &game.join(format!(
+            "assets/objects/{}/{}",
+            &asset_hash[..2],
+            asset_hash
+        )),
     )
     .await;
 
@@ -137,8 +149,12 @@ async fn verify_reports_missing_and_corrupted_accurately() {
     );
 
     // 人为删除一个 assets 文件 → verify 准确报告缺失（验收标准之一）
-    std::fs::remove_file(game.join(format!("assets/objects/{}/{}", &asset_hash[..2], asset_hash)))
-        .unwrap();
+    std::fs::remove_file(game.join(format!(
+        "assets/objects/{}/{}",
+        &asset_hash[..2],
+        asset_hash
+    )))
+    .unwrap();
     let report = verify_installation(Mirror::Official, &game, "t1.20.1")
         .await
         .unwrap();
@@ -154,5 +170,8 @@ async fn verify_reports_missing_and_corrupted_accurately() {
     assert!(!report.ok);
     assert_eq!(report.corrupted.len(), 1);
     assert_eq!(report.corrupted[0].path, "versions/t1.20.1/t1.20.1.jar");
-    assert_ne!(report.corrupted[0].actual_sha1, report.corrupted[0].expected_sha1);
+    assert_ne!(
+        report.corrupted[0].actual_sha1,
+        report.corrupted[0].expected_sha1
+    );
 }

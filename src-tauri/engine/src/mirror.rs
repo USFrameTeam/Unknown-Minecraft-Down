@@ -63,8 +63,10 @@ impl Mirror {
                 url = format!("https://{rest}");
             }
         }
-        if !url.starts_with("https://") && !url.starts_with("http://127.0.0.1")
-            && !url.starts_with("http://localhost") && !url.starts_with("http://[::1]")
+        if !url.starts_with("https://")
+            && !url.starts_with("http://127.0.0.1")
+            && !url.starts_with("http://localhost")
+            && !url.starts_with("http://[::1]")
         {
             return Err(EngineError::InvalidUrl(raw.to_string()));
         }
@@ -81,7 +83,10 @@ pub fn rewrite_to_bmclapi(url: &str) -> String {
         .replace("https://launchermeta.mojang.com", BMCL)
         .replace("https://launcher.mojang.com", BMCL)
         .replace("https://piston-data.mojang.com", BMCL)
-        .replace("https://resources.download.minecraft.net", &format!("{BMCL}/assets"))
+        .replace(
+            "https://resources.download.minecraft.net",
+            &format!("{BMCL}/assets"),
+        )
         .replace("https://libraries.minecraft.net", &format!("{BMCL}/maven"))
         .replace("https://maven.minecraftforge.net", &format!("{BMCL}/maven"))
 }
@@ -94,7 +99,8 @@ mod tests {
     fn official_passthrough_keeps_https() {
         let m = Mirror::Official;
         assert_eq!(
-            m.map_url("https://libraries.minecraft.net/a/b.jar").unwrap(),
+            m.map_url("https://libraries.minecraft.net/a/b.jar")
+                .unwrap(),
             "https://libraries.minecraft.net/a/b.jar"
         );
     }
@@ -103,7 +109,8 @@ mod tests {
     fn upgrades_http_to_https() {
         let m = Mirror::Official;
         assert_eq!(
-            m.map_url("http://resources.download.minecraft.net/aa/bb").unwrap(),
+            m.map_url("http://resources.download.minecraft.net/aa/bb")
+                .unwrap(),
             "https://resources.download.minecraft.net/aa/bb"
         );
     }
@@ -136,23 +143,28 @@ mod tests {
     fn bmclapi_rewrites_all_official_hosts() {
         let m = Mirror::Bmclapi;
         assert_eq!(
-            m.map_url("https://piston-meta.mojang.com/v1/packages/x/1.20.1.json").unwrap(),
+            m.map_url("https://piston-meta.mojang.com/v1/packages/x/1.20.1.json")
+                .unwrap(),
             "https://bmclapi2.bangbang93.com/v1/packages/x/1.20.1.json"
         );
         assert_eq!(
-            m.map_url("https://piston-data.mojang.com/v1/objects/abc/client.jar").unwrap(),
+            m.map_url("https://piston-data.mojang.com/v1/objects/abc/client.jar")
+                .unwrap(),
             "https://bmclapi2.bangbang93.com/v1/objects/abc/client.jar"
         );
         assert_eq!(
-            m.map_url("https://resources.download.minecraft.net/ab/abcd").unwrap(),
+            m.map_url("https://resources.download.minecraft.net/ab/abcd")
+                .unwrap(),
             "https://bmclapi2.bangbang93.com/assets/ab/abcd"
         );
         assert_eq!(
-            m.map_url("https://libraries.minecraft.net/com/g/g/a.jar").unwrap(),
+            m.map_url("https://libraries.minecraft.net/com/g/g/a.jar")
+                .unwrap(),
             "https://bmclapi2.bangbang93.com/maven/com/g/g/a.jar"
         );
         assert_eq!(
-            m.map_url("http://launchermeta.mojang.com/mc/game/version_manifest_v2.json").unwrap(),
+            m.map_url("http://launchermeta.mojang.com/mc/game/version_manifest_v2.json")
+                .unwrap(),
             "https://bmclapi2.bangbang93.com/mc/game/version_manifest_v2.json"
         );
     }
@@ -177,7 +189,10 @@ mod tests {
             m.forge_maven_base(),
             "https://bmclapi2.bangbang93.com/maven/"
         );
-        assert_eq!(Mirror::Official.forge_maven_base(), "https://maven.minecraftforge.net/");
+        assert_eq!(
+            Mirror::Official.forge_maven_base(),
+            "https://maven.minecraftforge.net/"
+        );
     }
 
     #[test]

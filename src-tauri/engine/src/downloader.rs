@@ -93,7 +93,8 @@ pub async fn download_file(
                         let _ = tokio::fs::remove_file(&part).await;
                         if attempt < MAX_ATTEMPTS {
                             log::warn!("SHA-1 不匹配，重试({attempt}/{MAX_ATTEMPTS}): {url}");
-                            tokio::time::sleep(Duration::from_millis(300 * u64::from(attempt))).await;
+                            tokio::time::sleep(Duration::from_millis(300 * u64::from(attempt)))
+                                .await;
                             continue;
                         }
                         return Err(EngineError::Sha1Mismatch {
@@ -193,7 +194,10 @@ async fn try_once(
     }
 
     let mut file = if use_resume {
-        tokio::fs::OpenOptions::new().append(true).open(part).await?
+        tokio::fs::OpenOptions::new()
+            .append(true)
+            .open(part)
+            .await?
     } else {
         tokio::fs::File::create(part).await?
     };
@@ -245,7 +249,9 @@ pub mod test_support {
         let addr = listener.local_addr().unwrap();
         tokio::spawn(async move {
             loop {
-                let Ok((stream, _)) = listener.accept().await else { break };
+                let Ok((stream, _)) = listener.accept().await else {
+                    break;
+                };
                 let body = body.clone();
                 let opts = ServerOpts {
                     support_range: opts.support_range,
@@ -260,11 +266,7 @@ pub mod test_support {
         TestServer { addr }
     }
 
-    async fn handle(
-        mut stream: TcpStream,
-        body: Vec<u8>,
-        opts: ServerOpts,
-    ) -> std::io::Result<()> {
+    async fn handle(mut stream: TcpStream, body: Vec<u8>, opts: ServerOpts) -> std::io::Result<()> {
         // 读取请求头
         let mut buf = vec![0u8; 8192];
         let mut read_all = Vec::new();
@@ -313,9 +315,17 @@ pub mod test_support {
             .map(|t| &payload[..(t as usize).min(payload.len())])
             .unwrap_or(payload);
 
-        let status = if partial { "206 Partial Content" } else { "200 OK" };
+        let status = if partial {
+            "206 Partial Content"
+        } else {
+            "200 OK"
+        };
         let extra = if partial {
-            format!("Content-Range: bytes={}-{}/*\r\n", start, body.len() as u64 - 1)
+            format!(
+                "Content-Range: bytes={}-{}/*\r\n",
+                start,
+                body.len() as u64 - 1
+            )
         } else {
             String::new()
         };

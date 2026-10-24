@@ -16,9 +16,7 @@ use mc_dl_engine::forge::{
 use mc_dl_engine::game_dir::ensure_game_skeleton;
 use mc_dl_engine::manifest::fetch_manifest;
 use mc_dl_engine::mirror::Mirror;
-use mc_dl_engine::version_json::{
-    fetch_version_json_by_summary, resolve_version, ManifestHandle,
-};
+use mc_dl_engine::version_json::{fetch_version_json_by_summary, resolve_version, ManifestHandle};
 use tokio_util::sync::CancellationToken;
 
 const MC_VERSION: &str = "1.20.1";
@@ -97,9 +95,17 @@ async fn forge_modern_pipeline_produces_official_artifacts() {
     assert!(!jobs.is_empty());
     for job in &jobs {
         let dest = game.join(&job.dest);
-        download_file(&client, &job.url, &dest, job.sha1.as_deref(), job.size, &cancel, &|_| {})
-            .await
-            .unwrap_or_else(|e| panic!("下载 {} 失败: {e}", job.url));
+        download_file(
+            &client,
+            &job.url,
+            &dest,
+            job.sha1.as_deref(),
+            job.size,
+            &cancel,
+            &|_| {},
+        )
+        .await
+        .unwrap_or_else(|e| panic!("下载 {} 失败: {e}", job.url));
     }
 
     // ---- 4) 内嵌 maven 产物提取 ----
@@ -143,10 +149,5 @@ async fn forge_modern_pipeline_produces_official_artifacts() {
     let actual = mc_dl_engine::downloader::hash_file(Path::new(&patched_path))
         .await
         .unwrap();
-    assert_eq!(
-        actual, expect_sha,
-        "自研管线的补丁产物必须与官方安装器一致"
-    );
+    assert_eq!(actual, expect_sha, "自研管线的补丁产物必须与官方安装器一致");
 }
-
-

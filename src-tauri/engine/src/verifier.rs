@@ -75,7 +75,9 @@ pub async fn verify_installation(
     let sem = std::sync::Arc::new(tokio::sync::Semaphore::new(8));
     let mut handles = Vec::new();
     for job in plan.jobs {
-        let Ok(permit) = sem.clone().acquire_owned().await else { break };
+        let Ok(permit) = sem.clone().acquire_owned().await else {
+            break;
+        };
         let gd = game_dir.clone();
         let guard = guard.clone();
         handles.push(tokio::spawn(async move {
@@ -119,11 +121,7 @@ enum CheckOutcome {
     Corrupted(ReportEntry),
 }
 
-async fn check_one(
-    game_dir: &std::path::Path,
-    guard: &PathGuard,
-    job: &FileJob,
-) -> CheckOutcome {
+async fn check_one(game_dir: &std::path::Path, guard: &PathGuard, job: &FileJob) -> CheckOutcome {
     let entry = |actual: Option<String>| ReportEntry {
         path: job.dest.clone(),
         url: Some(job.url.clone()),
