@@ -1,0 +1,27 @@
+[package]
+name = "mc-dl-engine"
+version = "0.1.0"
+edition = "2021"
+description = "Minecraft Java 版纯下载引擎：清单解析、版本 JSON 继承、Range 断点续传、SHA-1 校验、目录构建"
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "io-util", "sync", "time", "net"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-webpki-roots", "gzip", "json", "stream", "http2"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha1 = "0.10"
+hex = "0.4"
+thiserror = "2"
+futures-util = "0.3"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+log = "0.4"
+
+[features]
+default = []
+# 集成测试通过自引用 dev-dependency 启用，拿到本地测试 HTTP 服务器
+test-support = []
+
+[dev-dependencies]
+tempfile = "3"
+mc-dl-engine = { path = ".", features = ["test-support"] }

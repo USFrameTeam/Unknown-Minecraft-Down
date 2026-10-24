@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  rust:
+    name: Rust（引擎 + 应用层）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: 安装 Tauri Linux 依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: fmt
+        working-directory: src-tauri
+        run: cargo fmt --all -- --check
+      - name: clippy
+        working-directory: src-tauri
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: test
+        working-directory: src-tauri
+        run: cargo test --workspace
+      - name: 禁用检查：不允许 process::Command（不启动游戏/不执行下载文件）
+        run: |
+          ! grep -rn "process::Command" src-tauri/src src-tauri/engine/src
+
+  frontend:
+    name: 前端（tsc + Vitest + build + Playwright）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - name: 类型检查 + 构建
+        run: npm run build
+      - name: Vitest
+        run: npm test
+      - name: Playwright
+        run: |
+          npx playwright install chromium --with-deps
+          npx playwright test

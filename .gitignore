@@ -1,0 +1,7 @@
+node_modules/
+dist/
+target/
+.cargo/config.toml
+src-tauri/gen/
+test-results/
+playwright-report/

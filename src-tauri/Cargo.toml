@@ -1,0 +1,28 @@
+[package]
+name = "mc-downloader-gui"
+version = "0.1.0"
+edition = "2021"
+description = "Minecraft Java 版仅下载器（Tauri v2 桌面应用）"
+default-run = "mc-downloader-gui"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["sync", "macros", "rt-multi-thread", "time"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-webpki-roots", "gzip", "json"] }
+log = "0.4"
+mc-dl-engine = { path = "engine" }
+
+[workspace]
+members = ["engine"]
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
