@@ -12,7 +12,7 @@ concurrency:
 jobs:
   rust:
     name: Rust（引擎 + 应用层）
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -42,7 +42,7 @@ jobs:
 
   frontend:
     name: 前端（tsc + Vitest + build + Playwright）
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
