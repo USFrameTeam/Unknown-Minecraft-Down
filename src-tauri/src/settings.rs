@@ -10,11 +10,18 @@ use mc_dl_engine::Mirror;
 pub struct AppSettings {
     /// 首次启动向导是否完成
     pub onboarded: bool,
-    /// 已确认的 .minecraft 目录
+    /// 旧版单目录字段：读取时迁移到 game_dirs，不再写出
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub game_dir: Option<String>,
+    /// 多目录：所有已登记的 .minecraft 目录
+    pub game_dirs: Vec<String>,
+    /// 当前激活目录（新任务写入这里）
+    pub active_game_dir: Option<String>,
     pub mirror: Mirror,
     /// 下载并发数 1..=32
     pub concurrency: u32,
+    /// Forge processors 使用的 Java 路径（空 = 自动探测）
+    pub java_path: Option<String>,
 }
 
 impl Default for AppSettings {
@@ -22,8 +29,31 @@ impl Default for AppSettings {
         Self {
             onboarded: false,
             game_dir: None,
+            game_dirs: Vec::new(),
+            active_game_dir: None,
             mirror: Mirror::Official,
             concurrency: 12,
+            java_path: None,
+        }
+    }
+}
+
+impl AppSettings {
+    /// 单目录字段迁移 + 激活目录一致性修复。
+    pub fn normalize(&mut self) {
+        if self.game_dirs.is_empty() {
+            if let Some(dir) = self.game_dir.clone().filter(|d| !d.is_empty()) {
+                self.game_dirs.push(dir);
+            }
+        }
+        self.game_dir = None;
+        match &self.active_game_dir {
+            Some(active) if !active.is_empty() => {
+                if !self.game_dirs.contains(active) {
+                    self.active_game_dir = self.game_dirs.first().cloned();
+                }
+            }
+            _ => self.active_game_dir = self.game_dirs.first().cloned(),
         }
     }
 }

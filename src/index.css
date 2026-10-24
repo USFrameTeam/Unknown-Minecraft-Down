@@ -1,29 +1,48 @@
 @import "tailwindcss";
 
-/* shadcn 风格主题变量（深色优先） */
-@custom-variant dark (&:is(.dark *));
+/* =============================================================
+   Unknown Minecraft Down · Minecraft 风格主题
+   方角、2px 黑描边、内嵌斜面（bevel）、石质灰按钮、草绿进度条、
+   像素字体（标题/数字，拉丁字符；中文回退系统字体）
+   ============================================================= */
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(0.145 0.005 285);
-  --foreground: oklch(0.96 0.003 285);
-  --card: oklch(0.185 0.006 285);
-  --card-foreground: oklch(0.96 0.003 285);
-  --popover: oklch(0.2 0.006 285);
-  --popover-foreground: oklch(0.96 0.003 285);
-  --primary: oklch(0.72 0.16 155);
-  --primary-foreground: oklch(0.16 0.02 155);
-  --secondary: oklch(0.26 0.008 285);
-  --secondary-foreground: oklch(0.96 0.003 285);
-  --muted: oklch(0.25 0.008 285);
-  --muted-foreground: oklch(0.68 0.01 285);
-  --accent: oklch(0.28 0.01 285);
-  --accent-foreground: oklch(0.96 0.003 285);
-  --destructive: oklch(0.62 0.21 25);
-  --destructive-foreground: oklch(0.98 0.01 25);
-  --border: oklch(0.3 0.008 285);
-  --input: oklch(0.3 0.008 285);
-  --ring: oklch(0.72 0.16 155);
+  --mc-bg: #1e1e1f;
+  --mc-bg-dirt: #26221e;
+  --mc-panel: #2e2e30;
+  --mc-panel-dark: #262628;
+  --mc-border: #000000;
+  --mc-bevel-light: rgba(255, 255, 255, 0.16);
+  --mc-bevel-dark: rgba(0, 0, 0, 0.62);
+  --mc-text: #e6e6e6;
+  --mc-text-dim: #9d9da3;
+  --mc-green: #3c8527;
+  --mc-green-light: #57a83c;
+  --mc-yellow: #ffff55;
+  --mc-red: #9e3131;
+  --mc-red-light: #c04545;
+  --mc-blue: #3c44aa;
+
+  --background: var(--mc-bg);
+  --foreground: var(--mc-text);
+  --card: var(--mc-panel);
+  --card-foreground: var(--mc-text);
+  --popover: var(--mc-panel-dark);
+  --popover-foreground: var(--mc-text);
+  --primary: var(--mc-green);
+  --primary-foreground: #ffffff;
+  --secondary: #454549;
+  --secondary-foreground: var(--mc-text);
+  --muted: #35353a;
+  --muted-foreground: var(--mc-text-dim);
+  --accent: #3f3f45;
+  --accent-foreground: var(--mc-text);
+  --destructive: var(--mc-red);
+  --destructive-foreground: #ffffff;
+  --border: #131313;
+  --input: #131313;
+  --ring: var(--mc-green-light);
+  --radius: 0px;
 }
 
 @theme inline {
@@ -46,14 +65,13 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --radius-lg: var(--radius);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-sm: calc(var(--radius) - 4px);
+  --font-pixel: "Press Start 2P", "Zpix", ui-monospace, monospace;
 }
 
 @layer base {
   * {
-    border-color: var(--color-border);
+    border-color: var(--mc-border);
+    border-radius: 0 !important;
   }
   html,
   body,
@@ -61,8 +79,13 @@
     height: 100%;
   }
   body {
-    background-color: var(--color-background);
-    color: var(--color-foreground);
+    background-color: var(--mc-bg);
+    /* 微弱的棋盘格泥土质感 */
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.012) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.012) 1px, transparent 1px);
+    background-size: 16px 16px;
+    color: var(--mc-text);
     font-family:
       system-ui,
       -apple-system,
@@ -70,14 +93,222 @@
       "PingFang SC",
       "Microsoft YaHei",
       sans-serif;
+    font-size: 14px;
     user-select: none;
   }
   ::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
+    width: 12px;
+    height: 12px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #17171a;
   }
   ::-webkit-scrollbar-thumb {
-    background: var(--color-border);
-    border-radius: 5px;
+    background: #4a4a50;
+    border: 2px solid #17171a;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #5c5c64;
+  }
+}
+
+@layer components {
+  /* ---- 像素标题 ---- */
+  .mc-pixel {
+    font-family: var(--font-pixel);
+    letter-spacing: 0.5px;
+    line-height: 1.5;
+  }
+
+  /* ---- 面板（石头质感） ---- */
+  .mc-panel {
+    background: var(--mc-panel);
+    border: 2px solid var(--mc-border);
+    box-shadow:
+      inset 2px 2px 0 0 var(--mc-bevel-light),
+      inset -2px -2px 0 0 var(--mc-bevel-dark);
+  }
+  .mc-panel-dark {
+    background: var(--mc-panel-dark);
+    border: 2px solid var(--mc-border);
+    box-shadow:
+      inset 2px 2px 0 0 var(--mc-bevel-light),
+      inset -2px -2px 0 0 var(--mc-bevel-dark);
+  }
+
+  /* ---- 按钮：经典 MC 石质按钮 ---- */
+  .mc-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 9px 16px;
+    font-size: 14px;
+    color: #ffffff;
+    text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.55);
+    background: linear-gradient(180deg, #727272 0%, #585858 100%);
+    border: 2px solid var(--mc-border);
+    box-shadow:
+      inset 2px 2px 0 0 rgba(255, 255, 255, 0.3),
+      inset -2px -2px 0 0 rgba(0, 0, 0, 0.5);
+    cursor: pointer;
+    transition: filter 80ms ease;
+  }
+  .mc-btn:hover:not(:disabled) {
+    filter: brightness(1.14);
+  }
+  .mc-btn:active:not(:disabled) {
+    box-shadow:
+      inset -2px -2px 0 0 rgba(255, 255, 255, 0.18),
+      inset 2px 2px 0 0 rgba(0, 0, 0, 0.5);
+  }
+  .mc-btn:disabled {
+    filter: saturate(0.2) brightness(0.72);
+    cursor: not-allowed;
+    color: #a0a0a0;
+  }
+  .mc-btn-primary {
+    background: linear-gradient(180deg, var(--mc-green-light) 0%, var(--mc-green) 100%);
+  }
+  .mc-btn-danger {
+    background: linear-gradient(180deg, var(--mc-red-light) 0%, var(--mc-red) 100%);
+  }
+  .mc-btn-outline {
+    background: linear-gradient(180deg, #4a4a4e 0%, #38383c 100%);
+  }
+  .mc-btn-ghost {
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+    text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.35);
+  }
+  .mc-btn-ghost:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.06);
+  }
+  .mc-btn-sm {
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+
+  /* ---- 输入框 ---- */
+  .mc-input {
+    height: 36px;
+    width: 100%;
+    padding: 0 10px;
+    font-size: 14px;
+    color: var(--mc-text);
+    background: #131316;
+    border: 2px solid var(--mc-border);
+    box-shadow:
+      inset 2px 2px 0 0 rgba(0, 0, 0, 0.6),
+      inset -1px -1px 0 0 rgba(255, 255, 255, 0.08);
+    outline: none;
+  }
+  .mc-input:focus {
+    box-shadow:
+      inset 2px 2px 0 0 rgba(0, 0, 0, 0.6),
+      0 0 0 2px var(--mc-green-light);
+  }
+  .mc-input:disabled {
+    color: var(--mc-text-dim);
+  }
+  select.mc-input option {
+    background: #26262a;
+  }
+
+  /* ---- 进度条：XP 绿条 ---- */
+  .mc-progress {
+    position: relative;
+    height: 18px;
+    background: #151517;
+    border: 2px solid var(--mc-border);
+    box-shadow: inset 2px 2px 0 0 rgba(0, 0, 0, 0.7);
+    overflow: hidden;
+  }
+  .mc-progress-fill {
+    height: 100%;
+    background: repeating-linear-gradient(
+      90deg,
+      #4faa35 0px,
+      #4faa35 8px,
+      #3f8f2a 8px,
+      #3f8f2a 16px
+    );
+    box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.25);
+    transition: width 300ms ease-out;
+  }
+  .mc-progress-fill-indeterminate {
+    width: 33%;
+    animation: mc-slide 1.2s linear infinite;
+  }
+  @keyframes mc-slide {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(400%);
+    }
+  }
+
+  /* ---- 徽章 ---- */
+  .mc-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    font-size: 12px;
+    color: #fff;
+    text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.6);
+    border: 2px solid var(--mc-border);
+  }
+  .mc-badge-green {
+    background: var(--mc-green);
+  }
+  .mc-badge-gold {
+    background: #8a6d2b;
+  }
+  .mc-badge-red {
+    background: var(--mc-red);
+  }
+  .mc-badge-blue {
+    background: var(--mc-blue);
+  }
+  .mc-badge-gray {
+    background: #55555a;
+  }
+
+  /* ---- 分页标签（MC 设置页风格顶签） ---- */
+  .mc-tab {
+    padding: 8px 14px;
+    font-size: 14px;
+    color: var(--mc-text-dim);
+    border: 2px solid transparent;
+    cursor: pointer;
+  }
+  .mc-tab:hover {
+    color: var(--mc-text);
+  }
+  .mc-tab-active {
+    color: #fff;
+    background: var(--mc-panel);
+    border: 2px solid var(--mc-border);
+    border-bottom-color: var(--mc-panel);
+    box-shadow: inset 2px 2px 0 0 var(--mc-bevel-light);
+  }
+
+  /* ---- 黄字闪烁提示（MC splash text 风格） ---- */
+  .mc-splash {
+    color: var(--mc-yellow);
+    text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.6);
+    animation: mc-pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes mc-pulse {
+    0%,
+    100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.06);
+    }
   }
 }

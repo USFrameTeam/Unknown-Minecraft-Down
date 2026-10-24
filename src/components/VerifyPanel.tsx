@@ -9,7 +9,7 @@ import { Input } from "./ui/input";
 import { Badge } from "./ui/progress";
 
 export function VerifyPanel() {
-  const gameDir = useAppStore((s) => s.gameDir);
+  const gameDir = useAppStore((s) => s.activeGameDir);
   const mirror = useAppStore((s) => s.mirror);
   const tasks = useDownloadStore((s) => s.tasks);
   const order = useDownloadStore((s) => s.order);

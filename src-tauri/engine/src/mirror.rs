@@ -41,6 +41,14 @@ impl Mirror {
         Self::OFFICIAL_MANIFEST
     }
 
+    /// Forge 官方 maven 基地址（profile/version JSON 中无 url 的库默认从此解析）。
+    pub fn forge_maven_base(&self) -> &'static str {
+        match self {
+            Mirror::Official => "https://maven.minecraftforge.net/",
+            Mirror::Bmclapi => "https://bmclapi2.bangbang93.com/maven/",
+        }
+    }
+
     /// 把任一 MC 资源 URL 映射到当前镜像，并将 `http://` 强制升级为 `https://`。
     /// 环回地址（测试/自动化端点）豁免强制升级。
     pub fn map_url(&self, raw: &str) -> Result<String> {
@@ -75,6 +83,7 @@ pub fn rewrite_to_bmclapi(url: &str) -> String {
         .replace("https://piston-data.mojang.com", BMCL)
         .replace("https://resources.download.minecraft.net", &format!("{BMCL}/assets"))
         .replace("https://libraries.minecraft.net", &format!("{BMCL}/maven"))
+        .replace("https://maven.minecraftforge.net", &format!("{BMCL}/maven"))
 }
 
 #[cfg(test)]
@@ -155,6 +164,20 @@ mod tests {
             m.map_url("https://maven.fabricmc.net/net/fabricmc/fabric-loader/0.16.9/fabric-loader-0.16.9.jar").unwrap(),
             "https://maven.fabricmc.net/net/fabricmc/fabric-loader/0.16.9/fabric-loader-0.16.9.jar"
         );
+    }
+
+    #[test]
+    fn bmclapi_rewrites_forge_maven() {
+        let m = Mirror::Bmclapi;
+        assert_eq!(
+            m.map_url("https://maven.minecraftforge.net/net/minecraftforge/forge/1.20.1-47.3.0/forge-1.20.1-47.3.0-universal.jar").unwrap(),
+            "https://bmclapi2.bangbang93.com/maven/net/minecraftforge/forge/1.20.1-47.3.0/forge-1.20.1-47.3.0-universal.jar"
+        );
+        assert_eq!(
+            m.forge_maven_base(),
+            "https://bmclapi2.bangbang93.com/maven/"
+        );
+        assert_eq!(Mirror::Official.forge_maven_base(), "https://maven.minecraftforge.net/");
     }
 
     #[test]

@@ -11,6 +11,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use mc_dl_engine::downloader::build_http_client;
+use mc_dl_engine::forge::ForgeBuild;
 use mc_dl_engine::manifest::{fetch_manifest, VersionSummary};
 use mc_dl_engine::runner::{
     fetch_fabric_loaders, run_task, FabricLoaderSummary, TaskSnapshot, TaskSpec, TaskStatus,
@@ -21,6 +22,33 @@ use mc_dl_engine::Mirror;
 
 use crate::state::{AppState, TaskEntry};
 use crate::AppError;
+
+/// Forge 构建摘要（前端展示与任务参数用）。
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ForgeBuildSummary {
+    pub mc_version: String,
+    pub forge_version: String,
+    pub branch: Option<String>,
+    pub artifact_id: String,
+    pub version_id: String,
+    pub build: i64,
+    pub modified: String,
+}
+
+impl From<ForgeBuild> for ForgeBuildSummary {
+    fn from(b: ForgeBuild) -> Self {
+        Self {
+            mc_version: b.mcversion.clone(),
+            forge_version: b.version.clone(),
+            branch: b.branch.clone(),
+            artifact_id: b.artifact_id(),
+            version_id: b.version_id(),
+            build: b.build,
+            modified: b.modified,
+        }
+    }
+}
 
 fn now_ms() -> u64 {
     SystemTime::now()
@@ -56,6 +84,16 @@ pub async fn list_fabric_loaders(
     Ok(fetch_fabric_loaders(&client, &mc_version).await?)
 }
 
+/// Forge 构建列表（BMCLAPI，含安装器 SHA-1）。
+#[tauri::command]
+pub async fn list_forge_builds(
+    mc_version: String,
+) -> Result<Vec<ForgeBuildSummary>, AppError> {
+    let client = build_http_client()?;
+    let builds = mc_dl_engine::forge::fetch_forge_builds(&client, &mc_version).await?;
+    Ok(builds.into_iter().map(Into::into).collect())
+}
+
 /// `start_download(...) -> DownloadTaskId`
 #[tauri::command]
 pub async fn start_download(
@@ -65,6 +103,7 @@ pub async fn start_download(
     game_dir: String,
     mirror: Mirror,
     concurrency: u32,
+    java_path: Option<String>,
 ) -> Result<String, AppError> {
     let version_id = source.display_id();
     let task_id = format!("{}-{}", version_id, now_ms());
@@ -74,6 +113,7 @@ pub async fn start_download(
         game_dir,
         mirror,
         concurrency: concurrency.clamp(1, 32),
+        java_path,
     };
     let entry = register_task(&state, spec, task_id.clone())?;
     run_entry(&app, entry);

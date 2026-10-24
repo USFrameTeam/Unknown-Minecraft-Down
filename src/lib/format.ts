@@ -40,6 +40,7 @@ export const STAGE_LABELS: Record<string, string> = {
   version_json: "解析版本数据",
   libraries: "下载库与客户端",
   assets: "下载资源文件",
+  forge: "安装 Forge",
   verifying: "整理与校验",
   finished: "完成",
 };

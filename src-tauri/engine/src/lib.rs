@@ -1,4 +1,4 @@
-//! MC-Downloader-GUI 纯下载引擎。
+//! Unknown Minecraft Down 纯下载引擎。
 //!
 //! 职责边界（硬约束）：
 //! - 只做三件事：解析版本清单、下载文件、按标准目录放置并校验；
@@ -6,6 +6,7 @@
 //! - 所有网络请求走 HTTPS，下载先写 `.part` 临时文件，SHA-1 校验通过后原子改名。
 
 pub mod downloader;
+pub mod forge;
 pub mod game_dir;
 pub mod manifest;
 pub mod mirror;

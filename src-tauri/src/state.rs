@@ -58,7 +58,8 @@ impl AppState {
     // ---- settings ----
 
     pub fn load_settings(&self) {
-        if let Some(s) = crate::persistence::read_json::<AppSettings>(&self.settings_path()) {
+        if let Some(mut s) = crate::persistence::read_json::<AppSettings>(&self.settings_path()) {
+            s.normalize();
             *self.settings.write().unwrap() = s;
         }
     }
@@ -123,12 +124,14 @@ impl AppState {
                 record.status,
                 TaskStatus::Running | TaskStatus::Queued | TaskStatus::Paused
             );
+            let java_path = self.settings.read().unwrap().java_path.clone();
             let spec = TaskSpec {
                 version_id: record.version_id.clone(),
                 source: record.source.clone(),
                 game_dir: record.game_dir.clone(),
                 mirror: record.mirror,
                 concurrency: record.concurrency.clamp(1, 32),
+                java_path,
             };
             match crate::commands::download::register_task(self, spec, record.task_id.clone()) {
                 Ok(entry) => {
@@ -154,7 +157,7 @@ pub fn bootstrap(app: tauri::AppHandle) {
     let data_dir = app
         .path()
         .app_data_dir()
-        .unwrap_or_else(|_| std::env::temp_dir().join("mc-downloader-gui"));
+        .unwrap_or_else(|_| std::env::temp_dir().join("unknown-minecraft-down"));
     if let Err(e) = std::fs::create_dir_all(&data_dir) {
         log::error!("创建数据目录失败: {e}");
     }

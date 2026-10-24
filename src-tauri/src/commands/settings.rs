@@ -55,20 +55,23 @@ pub fn get_settings(state: State<'_, AppState>) -> Result<AppSettings, AppError>
     Ok(state.settings.read().unwrap().clone())
 }
 
+/// 自动探测系统 Java（仅用于执行 Forge 安装器的 processors）。
 #[tauri::command]
-pub fn save_settings(state: State<'_, AppState>, settings: AppSettings) -> Result<(), AppError> {
-    let mut s = settings;
-    s.concurrency = s.concurrency.clamp(1, 32);
-    if let Some(dir) = &s.game_dir {
-        if !dir.is_empty() {
-            let p = std::path::PathBuf::from(dir);
-            if !p.is_dir() {
-                return Err(AppError::new(
-                    "invalid_game_dir",
-                    format!(".minecraft 路径不存在: {dir}"),
-                ));
-            }
+pub fn detect_java() -> Result<Option<String>, AppError> {
+    Ok(mc_dl_engine::forge::locate_java(None).map(|p| p.display().to_string()))
+}
+
+#[tauri::command]
+pub fn save_settings(state: State<'_, AppState>, mut settings: AppSettings) -> Result<(), AppError> {
+    settings.normalize();
+    settings.concurrency = settings.concurrency.clamp(1, 32);
+    for dir in settings.game_dirs.iter() {
+        if !std::path::Path::new(dir).is_dir() {
+            return Err(AppError::new(
+                "invalid_game_dir",
+                format!(".minecraft 路径不存在: {dir}"),
+            ));
         }
     }
-    state.save_settings(&s)
+    state.save_settings(&settings)
 }

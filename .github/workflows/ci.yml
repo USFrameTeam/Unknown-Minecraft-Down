@@ -30,9 +30,11 @@ jobs:
       - name: test
         working-directory: src-tauri
         run: cargo test --workspace
-      - name: 禁用检查：不允许 process::Command（不启动游戏/不执行下载文件）
+      - name: 禁用检查：不允许启动游戏（process::Command 仅允许出现在 forge.rs）
         run: |
-          ! grep -rn "process::Command" src-tauri/src src-tauri/engine/src
+          # engine/src/forge.rs 执行的是 Forge 官方安装器的 processors（产品明确授权的
+          # 唯一例外），其余任何代码不允许出现进程启动调用。
+          ! grep -rn "process::Command" src-tauri/src src-tauri/engine/src | grep -v "engine/src/forge.rs"
 
   frontend:
     name: 前端（tsc + Vitest + build + Playwright）

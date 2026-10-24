@@ -1,5 +1,6 @@
 import { cn } from "../../lib/cn";
 
+/** Minecraft 风格 XP 绿条 */
 export function Progress({
   value,
   className,
@@ -16,13 +17,10 @@ export function Progress({
       aria-valuenow={indeterminate ? undefined : Math.round(v)}
       aria-valuemin={0}
       aria-valuemax={100}
-      className={cn("h-2 w-full overflow-hidden rounded-full bg-muted", className)}
+      className={cn("mc-progress", className)}
     >
       <div
-        className={cn(
-          "h-full rounded-full bg-primary transition-[width] duration-300 ease-out",
-          indeterminate && "animate-pulse w-1/3",
-        )}
+        className={cn("mc-progress-fill", indeterminate && "mc-progress-fill-indeterminate")}
         style={indeterminate ? undefined : { width: `${v}%` }}
       />
     </div>
@@ -35,29 +33,22 @@ export function Badge({
   className,
 }: {
   children: React.ReactNode;
-  tone?: "default" | "success" | "warning" | "danger" | "info";
+  tone?: "default" | "success" | "warning" | "danger" | "info" | "gray";
   className?: string;
 }) {
   const tones: Record<string, string> = {
-    default: "bg-secondary text-secondary-foreground",
-    success: "bg-primary/20 text-primary",
-    warning: "bg-yellow-500/20 text-yellow-400",
-    danger: "bg-destructive/20 text-destructive",
-    info: "bg-sky-500/20 text-sky-400",
+    default: "mc-badge-gray",
+    success: "mc-badge-green",
+    warning: "mc-badge-gold",
+    danger: "mc-badge-red",
+    info: "mc-badge-blue",
+    gray: "mc-badge-gray",
   };
   return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
-        tones[tone],
-        className,
-      )}
-    >
-      {children}
-    </span>
+    <span className={cn("mc-badge", tones[tone], className)}>{children}</span>
   );
 }
 
 export function Separator({ className }: { className?: string }) {
-  return <div className={cn("h-px w-full bg-border", className)} />;
+  return <div className={cn("h-0.5 w-full bg-black/50", className)} />;
 }

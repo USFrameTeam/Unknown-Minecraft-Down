@@ -288,14 +288,28 @@ pub fn natives_classifier(lib: &Library, ctx: &OsContext) -> Option<String> {
     Some(raw.replace("${arch}", bits))
 }
 
+/// Mojang 官方库仓库，version JSON 中无 url 旧式库的默认基地址。
+pub const MOJANG_LIB_BASE: &str = "https://libraries.minecraft.net/";
+
 /// 取 library 的下载 artifact。
 /// - 新式 `downloads`：主 artifact 或 classifiers[classifier]；
-/// - 旧式：`url`（缺省官方库仓库）+ maven 坐标拼接；
+/// - 旧式：`url`（默认官方库仓库）+ maven 坐标拼接；
 /// `downloads` 存在但无匹配 classifier 时返回 `None`（该库对当前平台不适用）。
 pub fn library_artifact(
     lib: &Library,
+    ctx: &OsContext,
+    classifier: Option<&str>,
+) -> Result<Option<Artifact>> {
+    library_artifact_with_base(lib, ctx, classifier, MOJANG_LIB_BASE)
+}
+
+/// 同 `library_artifact`，但旧式库的默认仓库基地址可指定
+/// （Forge 的 install_profile.libraries 默认走 Forge maven）。
+pub fn library_artifact_with_base(
+    lib: &Library,
     _ctx: &OsContext,
     classifier: Option<&str>,
+    default_base: &str,
 ) -> Result<Option<Artifact>> {
     if let Some(dl) = &lib.downloads {
         let found = match classifier {
@@ -312,12 +326,12 @@ pub fn library_artifact(
         None => name.to_string(),
     };
     let maven = parse_maven_name(&full_name)?;
-    let base = lib.url.clone().unwrap_or_else(|| "https://libraries.minecraft.net/".into());
+    let base = lib.url.clone().unwrap_or_else(|| default_base.to_string());
     let base = if base.ends_with('/') { base } else { format!("{base}/") };
     Ok(Some(Artifact {
         path: Some(maven.path),
         url: format!("{base}{}", maven_name_path(&full_name)),
-        sha1: None,
+        sha1: lib.checksums.as_ref().and_then(|c| c.first().cloned()),
         size: None,
     }))
 }

@@ -6,6 +6,7 @@ import { useDownloadStore } from "./stores/downloadStore";
 import type { TaskSnapshot } from "./types";
 import { Layout, type Page } from "./components/Layout";
 import { Onboarding } from "./components/Onboarding";
+import { HomePanel } from "./components/HomePanel";
 import { VersionPicker } from "./components/VersionPicker";
 import { DownloadQueue } from "./components/DownloadQueue";
 import { VerifyPanel } from "./components/VerifyPanel";
@@ -18,7 +19,7 @@ export default function App() {
   const load = useAppStore((s) => s.load);
   const refresh = useDownloadStore((s) => s.refresh);
   const applySnapshot = useDownloadStore((s) => s.applySnapshot);
-  const [page, setPage] = useState<Page>("versions");
+  const [page, setPage] = useState<Page>("home");
 
   useEffect(() => {
     load().catch(() => {
@@ -45,7 +46,11 @@ export default function App() {
   }, [applySnapshot]);
 
   if (!ready) {
-    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">加载中…</div>;
+    return (
+      <div className="flex h-full items-center justify-center text-sm text-[var(--mc-text-dim)]">
+        加载中…
+      </div>
+    );
   }
 
   // 硬约束：未完成首次启动向导（含免责声明），禁止进入主界面
@@ -61,6 +66,7 @@ export default function App() {
   return (
     <>
       <Layout page={page} onNavigate={setPage}>
+        {page === "home" && <HomePanel onNavigate={setPage} />}
         {page === "versions" && <VersionPicker />}
         {page === "queue" && <DownloadQueue />}
         {page === "verify" && <VerifyPanel />}

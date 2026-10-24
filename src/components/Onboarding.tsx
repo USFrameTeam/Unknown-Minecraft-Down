@@ -12,7 +12,7 @@ type Step = "welcome" | "path";
 
 export function Onboarding() {
   const save = useAppStore((s) => s.save);
-  const setLocal = useAppStore((s) => s.setLocal);
+  const addGameDir = useAppStore((s) => s.addGameDir);
   const mirror = useAppStore((s) => s.mirror);
   const [step, setStep] = useState<Step>("welcome");
   const [agreed, setAgreed] = useState(false);
@@ -88,8 +88,8 @@ export function Onboarding() {
   async function finish() {
     if (!detected) return;
     try {
-      setLocal({ gameDir: detected });
-      await save({ gameDir: detected, onboarded: true, mirror });
+      await addGameDir(detected);
+      await save({ onboarded: true, mirror });
       toast("配置完成，开始使用下载器", "success");
     } catch (e) {
       toast(`保存配置失败: ${e}`, "error");
@@ -97,15 +97,17 @@ export function Onboarding() {
   }
 
   return (
-    <div className="flex h-full items-center justify-center overflow-auto bg-background p-6">
+    <div className="flex h-full items-center justify-center overflow-auto bg-[var(--mc-bg)] p-6">
       {step === "welcome" && (
-        <div className="w-full max-w-2xl rounded-lg border bg-card p-8 shadow-xl" data-testid="onboarding-welcome">
-          <h1 className="text-2xl font-bold">欢迎使用 MC-Downloader-GUI</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
+        <div className="mc-panel w-full max-w-2xl p-8" data-testid="onboarding-welcome">
+          <h1 className="mc-pixel text-[15px] font-bold text-[var(--mc-green-light)]">
+            欢迎使用 MC-DOWNLOADER
+          </h1>
+          <p className="mt-3 text-sm text-[var(--mc-text-dim)]">
             Minecraft Java 版「仅下载器」：解析版本清单、下载官方文件、按标准目录放置并校验。
           </p>
           <div
-            className="mt-6 rounded-md border border-yellow-500/40 bg-yellow-500/10 p-4 text-sm leading-relaxed text-yellow-200"
+            className="mt-6 whitespace-pre-wrap border-2 border-[#8a6d2b] bg-[#3a3222] p-4 text-sm leading-6 text-[#ffd94a]"
             data-testid="disclaimer"
           >
             {DISCLAIMER_TEXT}
@@ -115,12 +117,12 @@ export function Onboarding() {
               type="checkbox"
               checked={agreed}
               onChange={(e) => setAgreed(e.target.checked)}
-              className="mt-0.5 h-4 w-4 accent-[var(--color-primary)]"
+              className="mt-0.5 h-4 w-4 accent-[#3c8527]"
             />
             我已阅读并理解以上说明，仅将本工具用于纯净下载与目录构建。
           </label>
           <div className="mt-6 flex justify-end">
-            <Button disabled={!agreed} onClick={() => setStep("path")} data-testid="onboarding-next">
+            <Button variant="primary" disabled={!agreed} onClick={() => setStep("path")} data-testid="onboarding-next">
               下一步：配置游戏目录
             </Button>
           </div>
@@ -128,12 +130,12 @@ export function Onboarding() {
       )}
 
       {step === "path" && (
-        <div className="w-full max-w-2xl rounded-lg border bg-card p-8 shadow-xl" data-testid="onboarding-path">
-          <h1 className="text-xl font-bold">配置 .minecraft 目录</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
+        <div className="mc-panel w-full max-w-2xl p-8" data-testid="onboarding-path">
+          <h1 className="mc-pixel text-[13px] font-bold">配置 .MINECRAFT 目录</h1>
+          <p className="mt-2 text-sm text-[var(--mc-text-dim)]">
             可以选择 <b>.minecraft</b> 文件夹本身，或 PCL / HMCL / BakaXL 等
             <b>启动器所在的父文件夹</b>（会自动向下探测）。也可以选择空文件夹，创建全新的
-            .minecraft。
+            .minecraft。之后可在设置页登记更多目录。
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
             <Button variant="outline" onClick={autoDetect} disabled={busy} data-testid="btn-auto-detect">
@@ -147,15 +149,15 @@ export function Onboarding() {
             </Button>
           </div>
           {detectError && (
-            <div className="mt-4 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+            <div className="mt-4 border-2 border-[#9e3131] bg-[#3a2222] p-3 text-sm text-[#ff8080]">
               {detectError}
             </div>
           )}
           {detected && (
-            <div className="mt-4 rounded-md border border-primary/40 bg-primary/10 p-4" data-testid="detected-path">
-              <div className="text-xs text-muted-foreground">已识别的 .minecraft 目录</div>
+            <div className="mc-panel-dark mt-4 p-4" data-testid="detected-path">
+              <div className="text-xs text-[var(--mc-text-dim)]">已识别的 .minecraft 目录</div>
               <div className="mt-1 flex items-center gap-2">
-                <Input readOnly value={detected} className="flex-1" />
+                <Input readOnly value={detected} className="flex-1 font-mono text-xs" />
               </div>
             </div>
           )}
@@ -163,7 +165,7 @@ export function Onboarding() {
             <Button variant="ghost" onClick={() => setStep("welcome")}>
               上一步
             </Button>
-            <Button disabled={!detected} onClick={finish} data-testid="onboarding-finish">
+            <Button variant="primary" disabled={!detected} onClick={finish} data-testid="onboarding-finish">
               完成
             </Button>
           </div>

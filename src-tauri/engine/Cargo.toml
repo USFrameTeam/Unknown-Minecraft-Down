@@ -5,7 +5,7 @@ edition = "2021"
 description = "Minecraft Java 版纯下载引擎：清单解析、版本 JSON 继承、Range 断点续传、SHA-1 校验、目录构建"
 
 [dependencies]
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "io-util", "sync", "time", "net"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "io-util", "sync", "time", "net", "process"] }
 tokio-util = { version = "0.7", features = ["rt"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-webpki-roots", "gzip", "json", "stream", "http2"] }
 serde = { version = "1", features = ["derive"] }

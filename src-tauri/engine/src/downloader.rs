@@ -25,7 +25,7 @@ pub const MAX_ATTEMPTS: u32 = 3;
 
 pub fn build_http_client() -> reqwest::Result<reqwest::Client> {
     reqwest::Client::builder()
-        .user_agent("MC-Downloader-GUI/0.1 (pure-downloader)")
+        .user_agent("UnknownMinecraftDown/0.2 (downloader)")
         .connect_timeout(Duration::from_secs(15))
         .read_timeout(Duration::from_secs(60))
         .pool_max_idle_per_host(32)

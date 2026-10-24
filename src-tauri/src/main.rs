@@ -1,6 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-//! MC-Downloader-GUI —— Minecraft Java 版仅下载器。
+//! Unknown Minecraft Down —— Minecraft Java 版下载器。
 //!
 //! 职责边界（硬约束）：
 //! - 只做：解析版本清单、下载文件、按标准目录放置并校验；
@@ -25,6 +25,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             commands::download::list_versions,
             commands::download::list_fabric_loaders,
+            commands::download::list_forge_builds,
             commands::download::start_download,
             commands::download::cancel_download,
             commands::download::pause_download,
@@ -38,6 +39,7 @@ fn main() {
             commands::settings::prepare_game_dir,
             commands::settings::get_settings,
             commands::settings::save_settings,
+            commands::settings::detect_java,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

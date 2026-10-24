@@ -1,16 +1,18 @@
-# MC-Downloader-GUI 设计文档
+# Unknown Minecraft Down 设计文档
 
-> Minecraft Java 版「仅下载器」—— 解析版本清单、下载文件、按标准目录放置并校验。仅此三件事。
+> Minecraft Java 版「仅下载器」—— 解析版本清单、下载文件、按标准目录放置并校验。
+> v0.2：按产品决策新增 Forge 安装（执行官方安装器 processors，唯一授权例外）、
+> 多目录管理、主页下载进度、Minecraft 风格 UI。
 
 ## 0. 硬约束（不可违反）
 
-1. 绝不启动 Minecraft、绝不生成 Java 启动参数、绝不绕过正版验证（代码中无 `std::process::Command`）。
+1. 绝不启动 Minecraft、绝不生成 Java 启动参数、绝不绕过正版验证。
 2. 不修改 PCL / HMCL / BakaXL 的私有配置或数据库；兼容性完全依赖 `.minecraft` 标准目录结构，尤其是 `versions/<id>/<id>.json`。
-3. 不执行任何下载得到的 jar/exe/脚本；natives 解压只读取 jar 内容（zip 读取），白名单扩展名。
-4. 下载源仅限 Mojang 官方与 BMCLAPI 镜像。
+3. 进程启动调用（`process::Command`）**仅允许**出现在 `engine/src/forge.rs`：执行 Forge 官方安装器的 processors（用户明确授权的 Forge 安装能力），不执行任何其他下载产物。CI 有 grep 检查强制此边界。
+4. 下载源仅限 Mojang 官方、BMCLAPI 镜像、Fabric Meta（官方）、Forge 官方 maven。
 5. 所有网络请求 HTTPS（非环回地址的 `http://` 一律强升）；下载先写 `<dest>.part`，SHA-1 通过后原子改名。
 6. 不收集账号信息，不要求 Microsoft 登录。
-7. 首次启动向导与关于页显著展示免责与建议提示语（见 `src/content/disclaimer.ts`）。
+7. 首次启动向导与关于页显著展示免责与建议提示语（含"国内主流启动器暂停 MC 下载启动功能，本工具作为替代方案"说明，见 `src/content/disclaimer.ts`）。
 
 ---
 
@@ -30,7 +32,7 @@
 └────────────┼───────────────────────────────────────────────────────────────────────┘
              │ Tauri IPC（commands + event "download://progress"）
 ┌────────────▼───────────────────────── Rust（Tokio 异步）───────────────────────────┐
-│  mc-downloader-gui（应用层）                                                        │
+│  unknown-minecraft-down（应用层）                                                        │
 │   ├─ commands/download.rs  list_versions / start_download / pause / resume /        │
 │   │                         cancel / get_download_state / list_tasks / verify       │
 │   ├─ commands/settings.rs  detect_game_dir / probe_default_dir / prepare_game_dir   │
@@ -121,6 +123,42 @@ pub fn evaluate_rules(rules: Option<&[Rule]>, ctx: &OsContext) -> bool {
 
 另提供 `probe_default_dir`（%APPDATA%/.minecraft 或 $HOME/.minecraft）与 `prepare_game_dir`（空文件夹初始化骨架）。
 
+### 2.7 Forge 安装管线（`engine/src/forge.rs`，v0.2 新增）
+
+按官方安装器（真实 1.20.1-47.3.0 与 1.12.2-14.23.5.2860 安装器实测逆向）复刻：
+
+```text
+BMCLAPI 构建列表（含安装器 SHA-1）
+  → 下载官方安装器 jar（镜像可切，哈希校验）
+  → 解析 install_profile.json（spec 0/1）+ 内嵌 version.json
+  → version.json 落盘 versions/<id>/<id>.json，进入常规继承链流程
+  → profile.libraries 并入下载计划（无 url 旧式库默认 Forge maven）
+  → Forge 阶段：
+      launcher_profiles.json 桩文件（官方安装器的启动器标记要求）
+      提取安装器内嵌 maven/* 产物（≤1.12.2 的 universal 只内嵌、url 为空）
+      [1.13+] 定位 Java（设置项 > JAVA_HOME > PATH > 常见目录）
+        逐个执行 client 侧 processors（MCP_DATA / DOWNLOAD_MOJMAPS /
+        MERGE_MAPPING / jarsplitter / FART / binarypatcher）
+        - 参数解析：{TOKEN}（内置 MINECRAFT/ROOT/SIDE/INSTALLER/
+          LIBRARY_DIR/MINECRAFT_VERSION/MINECRAFT_JAR + data 表）、
+          [g:a:v[:classifier[@ext]]]（maven 路径）、'literal'、
+          /安装器内路径（先解压为真实文件）
+        - 每步以 outputs 的 SHA-1 模板校验产物
+      [≤1.12.2] 无 processors，纯下载完成
+```
+
+**验证方式**：`tests/forge_pipeline.rs`（`#[ignore]`，需网络+Java）对真实的
+1.20.1-47.3.0 完整执行上述管线，断言补丁客户端
+`forge-1.20.1-47.3.0-client.jar` 的 SHA-1 与 install_profile 声明的
+`PATCHED_SHA` 一致 —— 即与官方安装器产物逐字节一致。本仓库开发机上已实际通过。
+
+**网络要求**：processors 中 `DOWNLOAD_MOJMAPS` 直接访问 Mojang 官方端点
+（piston-meta / piston-data），Forge 1.13+ 安装期间需要二者可达（与镜像偏好无关）。
+
+**安全边界**：Java 执行仅发生在 forge.rs、仅运行官方安装器声明/自带的
+processor jar，取消令牌可随时终止（kill_on_drop）；CI 以 grep 强制
+`process::Command` 不出现在其他任何源文件。
+
 ---
 
 ## 3. Tauri Command 与 Event 完整签名
@@ -129,8 +167,10 @@ pub fn evaluate_rules(rules: Option<&[Rule]>, ctx: &OsContext) -> bool {
 // commands/download.rs
 list_versions(mirror: Mirror) -> Result<Vec<VersionSummary>, AppError>
 list_fabric_loaders(mc_version: String) -> Result<Vec<FabricLoaderSummary>, AppError>
+list_forge_builds(mc_version: String) -> Result<Vec<ForgeBuildSummary>, AppError>
 start_download(app, state, source: VersionSource, game_dir: String,
-               mirror: Mirror, concurrency: u32) -> Result<String /*taskId*/, AppError>
+               mirror: Mirror, concurrency: u32,
+               java_path: Option<String>) -> Result<String /*taskId*/, AppError>
 cancel_download(state, task_id: String) -> Result<(), AppError>     // 终止（保留 .part）
 pause_download(state, task_id: String) -> Result<(), AppError>      // 引擎 Canceled → 映射为 Paused
 resume_download(app, state, task_id: String) -> Result<(), AppError> // 断点续跑
@@ -145,15 +185,21 @@ detect_game_dir(selected_path: String) -> Result<String, AppError>
 probe_default_dir() -> Result<Option<String>, AppError>
 prepare_game_dir(path: String) -> Result<String, AppError>   // 空目录 → versions/assets/libraries
 get_settings(state) -> Result<AppSettings, AppError>
-save_settings(state, settings: AppSettings) -> Result<(), AppError>
+save_settings(state, settings: AppSettings) -> Result<(), AppError>  // normalize + 逐目录存在性校验
+detect_java() -> Result<Option<String>, AppError>            // 仅用于 Forge processors
 ```
 
 ```ts
 // 关键 DTO（serde camelCase，与 src/types.ts 一一对应）
-type VersionSource = { id: string } | { mcVersion: string; loaderVersion: string };  // 原版 / Fabric
+type VersionSource =
+  | { id: string }                                    // 原版
+  | { mcVersion: string; loaderVersion: string }      // Fabric
+  | { mcVersion: string; forgeVersion: string; branch?: string | null };  // Forge
 interface TaskSnapshot { taskId; versionId; gameDir; mirror; status: TaskStatus;
-  stage?: "manifest"|"version_json"|"libraries"|"assets"|"verifying"|"finished";
+  stage?: "manifest"|"version_json"|"libraries"|"assets"|"forge"|"verifying"|"finished";
   downloadedBytes; totalBytes; speedBps; currentFile?; filesDone; filesTotal; error?; createdAt; finishedAt? }
+interface AppSettings { onboarded; gameDirs: string[]; activeGameDir?: string|null;
+  mirror; concurrency; javaPath?: string|null }   // 旧 gameDir 单目录字段读取时自动迁移
 interface VerificationReport { versionId; gameDir; ok; checkedFiles; missing: ReportEntry[]; corrupted: ReportEntry[]; totalBytes }
 ```
 
@@ -172,28 +218,41 @@ App
  ├─ ready? ── 否 → 加载页
  ├─ !onboarded ── Onboarding（全屏强制向导，未完成禁止进入主界面）
  │    step: "welcome"（免责声明 + 勾选确认）→ "path"（自动探测/选择文件夹/新建）
- │    → save({gameDir, onboarded:true}) → 进入主界面
- └─ Layout(page 状态: versions|queue|verify|settings)
-      ├─ VersionPicker   （vanilla: 搜索+类型筛选+列表分页 / fabric: MC 版+loader 选择）
-      ├─ DownloadQueue   TaskCard[]（进度/速度/ETA/暂停/取消二次确认/批量暂停/清除已完成）
-      ├─ VerifyPanel     版本输入 → 报告表格（缺失/损坏）
-      └─ SettingsPanel   换目录二次确认 / 并发数 / 镜像 / 关于+免责声明
+ │    → addGameDir + save({onboarded:true}) → 进入主界面
+ └─ Layout(page: home|versions|queue|verify|settings)
+      ├─ HomePanel      主页：聚合进度条+速度+ETA、每任务迷你进度（事件驱动）、
+      │                  最近记录、免责声明；常驻底部状态栏（任何页面可见）
+      ├─ VersionPicker  原版(搜索/类型筛选) / Fabric / Forge 选项卡
+      │                  + DirSelector（多目录切换）+ MirrorSwitch
+      ├─ DownloadQueue  TaskCard[]（进度/速度/ETA/暂停/取消二次确认/批量）
+      ├─ VerifyPanel    版本输入 → 报告表格（缺失/损坏）
+      └─ SettingsPanel  多目录管理（添加/移除/切换，均二次确认）、并发数、
+                        Java 路径（Forge 用，自动探测）、镜像、关于+免责
 ```
 
 ```ts
-// appStore.ts
-{ ready, onboarded, gameDir: string|null, mirror: "official"|"bmclapi", concurrency: number,
-  load(): 从 get_settings 读取; save(patch): 合并后调 save_settings; setLocal(patch) }
+// appStore.ts（多目录）
+{ ready, onboarded, gameDirs: string[], activeGameDir: string|null,
+  mirror, concurrency, javaPath: string|null,
+  load()/save(patch)/setLocal(patch),
+  addGameDir(dir)   // 去重；首个目录自动激活
+  removeGameDir(dir)// 拒绝移除最后一个；移除激活目录时顺延
+  setActiveGameDir(dir) }
 
 // downloadStore.ts
 { tasks: Record<taskId, TaskSnapshot>, order: taskId[], lastError,
   refresh(): list_download_tasks（启动恢复）,
   applySnapshot(snap): 事件入口（新任务入 order，其余原位更新）,
-  startTask(source, displayId, gameDir, mirror, concurrency) -> taskId,
+  startTask(source, displayId, gameDir, mirror, concurrency, javaPath?) -> taskId,
   pauseTask/cancelTask/resumeTask/clearFinished }
 ```
 
-向导流转状态机：`ready=false → 加载设置 → onboarded? 主界面 : Onboarding(welcome → path → 完成)`。`welcome` 页必须勾选“已阅读免责声明”才能进入下一步（`onboarding-next` disabled）。
+**UI 风格（Minecraft 主题，v0.2）**：方角 + 2px 黑描边 + 内嵌斜面（bevel 阴影）的
+石质面板（`.mc-panel`）、经典灰石按钮与绿色主按钮（`.mc-btn`）、XP 风格绿色条纹
+进度条（`.mc-progress`）、像素字体 Press Start 2P（标题/数字，中文回退系统字体）、
+黄字 splash 动画。全部以 CSS 实现（无图片资源），组件经语义类统一换肤。
+
+向导流转状态机：`ready=false → 加载设置 → onboarded? 主界面(主页) : Onboarding(welcome → path → 完成)`。`welcome` 页必须勾选"已阅读免责声明"才能进入下一步（`onboarding-next` disabled）。
 
 ---
 
@@ -203,9 +262,10 @@ App
 
 | 层级 | 工具 | 覆盖 | 运行 |
 |---|---|---|---|
-| 引擎单元/集成 | `cargo test -p mc-dl-engine`（39 例） | rules 语义（last-match-wins/os/arch/features）、natives 分类器 `${arch}`、maven 坐标（含 `@zip`）、mirror 映射与 HTTPS 强升、`safe_join`/`ensure_within`（含**符号链接逃逸**）、`detect_game_dir` 四种形态、`inheritsFrom` 离线合并（Fabric 风格夹具 + 环检测）、**Range 断点续传**（本地 HTTP 服务器模拟断流 → 断言 `Range: bytes=N-` 重发 + 整文件 SHA-1 一致）、SHA-1 失败重试与清理、取消、已存在文件跳过、natives 解压防穿越、`verify_installation` 缺失/损坏报告 | `npm run test:rust`（见 package.json scripts）或 `cargo test --workspace` |
-| 前端单元 | Vitest（11 例） | 格式化工具、appStore 读写、downloadStore 队列归并/批量命令 | `npm test` |
-| 前端 E2E | Playwright + `__TAURI_INTERNALS__` mock | 强制向导与免责声明可见、向导完成 → 主界面、选版本 → 二次确认 → 队列、模拟 progress 事件 → 进度/速度、完成 → 兼容性提示、取消二次确认、校验页缺失表格 | `npm run test:e2e` |
+| 引擎单元/集成 | `cargo test -p mc-dl-engine`（48 例） | rules 语义（last-match-wins/os/arch/features）、natives 分类器 `${arch}`、maven 坐标（含 `@zip`/`classifier@ext`）、mirror 映射（含 Forge maven）与 HTTPS 强升、`safe_join`/`ensure_within`（含**符号链接逃逸**）、`detect_game_dir` 四种形态、`inheritsFrom` 离线合并（Fabric 风格夹具 + 环检测）、**Range 断点续传**（本地 HTTP 服务器模拟断流 → 断言 `Range: bytes=N-` 重发 + 整文件 SHA-1 一致）、SHA-1 失败重试与清理、取消、已存在文件跳过、natives 解压防穿越、`verify_installation` 缺失/损坏报告、Forge profile 解析/token 解析/URL 构造 | `npm run test:rust` 或 `cargo test --workspace` |
+| Forge 真实管线 | `cargo test --test forge_pipeline -- --ignored`（需网络+Java） | 真实 1.20.1-47.3.0：安装器下载校验 → profile 库下载 → 内嵌提取 → processors 全程执行 → **补丁产物 SHA-1 与官方 PATCHED_SHA 一致** | 本地手动 |
+| 前端单元 | Vitest（14 例） | 格式化工具、appStore 多目录读写/切换/移除顺延、downloadStore 队列归并/批量命令/javaPath 传参 | `npm test` |
+| 前端 E2E | Playwright + `__TAURI_INTERNALS__` mock（7 场景） | 强制向导与免责声明（含替代方案文案）、向导完成 → 主页、**主页进度面板+底部状态栏（事件驱动）**、原版下载 → 队列 → 完成 → 兼容性提示、**Forge 选项卡发起（javaPath 透传）**、**多目录切换联动**、取消二次确认、校验页缺失表格 | `npm run test:e2e` |
 | 真机端到端（人工/CI-可选） | `tauri-driver`（WebDriver） | 真实窗口中的完整下载（空目录 1.20.1 → 目录结构断言）、强杀进程 → 重启续传 | 见下 |
 
 **tauri-driver 集成要点**（可选，CI 需 Linux + WebKitGTK）：
@@ -231,12 +291,15 @@ App
 
 - ❌ 启动游戏 / 生成 Java 启动参数 / JVM 调优
 - ❌ 正版登录（Microsoft OAuth）、离线登录、任何验证绕过
-- ❌ 模组管理（Forge/Fabric mod 安装、mods 目录管理）
+- ❌ 模组管理（mods 目录管理、mod 下载）
 - ❌ 整合包管理（CurseForge/Modrinth 整合包解析安装）
 - ❌ 版本隔离、内存/分辨率等启动配置
-- ❌ Forge 安装（需要安装器内嵌 processor 流程，与“仅下载、不执行”约束冲突；Fabric 经官方 Meta 的 profile JSON 完整支持）
+- ❌ NeoForge（结构同 Forge，可后续按同一管线扩展）
 - ❌ 修改任何第三方启动器的私有配置/数据库
-- ❌ 内置 Mojang 官方与 BMCLAPI 之外的任何下载源
+- ❌ 内置 Mojang 官方、BMCLAPI、Fabric Meta、Forge maven 之外的任何下载源
+
+> Forge 安装原属此清单（提示词约束），v0.2 起按产品决策移出并实现：
+> 以官方安装器 + 其 processors 完成，执行范围严格限定于 forge.rs（见 §2.7）。
 
 ---
 

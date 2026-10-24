@@ -34,6 +34,7 @@ pub enum Stage {
     VersionJson,
     Libraries,
     Assets,
+    Forge,
     Verifying,
     Finished,
 }
@@ -74,12 +75,18 @@ pub struct TaskSnapshot {
     pub finished_at: Option<u64>,
 }
 
-/// 版本来源：原版（清单 id）或 Fabric Loader（meta.fabricmc.net 的 inheritsFrom 配置）。
+/// 版本来源：原版（清单 id）、Fabric Loader（Fabric Meta）或 Forge（官方安装器）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum VersionSource {
     Vanilla { id: String },
     Fabric { mc_version: String, loader_version: String },
+    Forge {
+        mc_version: String,
+        forge_version: String,
+        #[serde(default)]
+        branch: Option<String>,
+    },
 }
 
 impl VersionSource {
@@ -90,6 +97,16 @@ impl VersionSource {
                 mc_version,
                 loader_version,
             } => format!("fabric-loader-{loader_version}-{mc_version}"),
+            VersionSource::Forge {
+                mc_version,
+                forge_version,
+                branch,
+            } => match branch {
+                Some(b) if !b.is_empty() => {
+                    format!("{mc_version}-forge-{forge_version}-{b}")
+                }
+                _ => format!("{mc_version}-forge-{forge_version}"),
+            },
         }
     }
 }
@@ -103,6 +120,9 @@ pub struct TaskSpec {
     pub mirror: Mirror,
     /// 并发数 1..=32
     pub concurrency: u32,
+    /// Forge processors 使用的 Java 路径（None = 自动探测）
+    #[serde(default)]
+    pub java_path: Option<String>,
 }
 
 pub const EVENT_PROGRESS: &str = "download://progress";
@@ -194,7 +214,7 @@ impl Runtime {
         *self.stage.lock().unwrap() = Some(s);
     }
 
-    fn set_current_file(&self, f: &str) {
+    pub(crate) fn set_current_file(&self, f: &str) {
         *self.current_file.lock().unwrap() = Some(f.to_string());
     }
 
@@ -342,6 +362,7 @@ async fn run_inner(
     let _ = events_tx
         .send(rt.snapshot(base, TaskStatus::Running, None))
         .await;
+    let mut forge_hold: Option<(crate::forge::InstallProfile, std::path::PathBuf)> = None;
     let entry = match &spec.source {
         VersionSource::Vanilla { id } => {
             load_or_fetch_version_json(&client, spec.mirror, &game_dir, id, &manifest_handle)
@@ -351,6 +372,35 @@ async fn run_inner(
             mc_version,
             loader_version,
         } => fetch_fabric_profile(&client, mc_version, loader_version).await?,
+        VersionSource::Forge {
+            mc_version,
+            forge_version,
+            branch,
+        } => {
+            // 构建列表（含安装器 SHA-1）→ 下载安装器 → 解析 profile 与内嵌 version.json
+            let builds = crate::forge::fetch_forge_builds(&client, mc_version).await?;
+            let build = builds
+                .into_iter()
+                .find(|b| {
+                    &b.version == forge_version && b.branch.as_deref() == branch.as_deref()
+                })
+                .ok_or_else(|| {
+                    EngineError::VersionNotFound(format!(
+                        "Forge {mc_version}-{forge_version} 不在构建列表中"
+                    ))
+                })?;
+            let (entry, profile, installer) = crate::forge::fetch_forge_version_entry(
+                &client,
+                spec.mirror,
+                &build.artifact_id(),
+                build.installer_sha1(),
+                &game_dir,
+                cancel,
+            )
+            .await?;
+            forge_hold = Some((profile, installer));
+            entry
+        }
     };
     let chain = resolve_version(&client, spec.mirror, &game_dir, entry, &manifest_handle).await?;
 
@@ -364,6 +414,12 @@ async fn run_inner(
     // ---- 构建下载计划 ----
     let ctx = OsContext::detect();
     let mut plan = crate::plan::build_plan(&chain, spec.mirror, &ctx)?;
+    // Forge：安装器声明的库（processor 依赖等）并入下载计划
+    if let Some((profile, _)) = &forge_hold {
+        let extra = crate::forge::profile_library_jobs(profile, spec.mirror, &game_dir)?;
+        plan.total_bytes += extra.iter().filter_map(|j| j.size).sum::<u64>();
+        plan.jobs.extend(extra);
+    }
     validate_plan_paths(&plan, &game_dir)?;
     rt.total_bytes.store(plan.total_bytes, Ordering::Relaxed);
     rt.files_total.store(plan.jobs.len() as u64, Ordering::Relaxed);
@@ -397,7 +453,53 @@ async fn run_inner(
     plan.virtual_copies = copies;
     run_jobs(asset_jobs, spec, rt, &game_dir, client.clone()).await?;
 
-    // ---- 阶段 5：natives 解压 + legacy 虚拟拷贝 ----
+    // ---- 阶段 5：Forge（内嵌产物提取 + processors，仅在 Forge 任务时）----
+    if let Some((profile, installer)) = forge_hold {
+        rt.set_stage(Stage::Forge);
+        let _ = events_tx
+            .send(rt.snapshot(base, TaskStatus::Running, None))
+            .await;
+        cancel_err(cancel)?;
+        crate::forge::ensure_launcher_profiles_stub(&game_dir).await?;
+        let extracted = crate::forge::extract_embedded_maven(
+            &installer,
+            &profile,
+            &game_dir.join("libraries"),
+        )?;
+        log::info!("Forge 安装器内嵌产物提取 {extracted} 个");
+        // 现代 Forge（1.13+）：执行官方安装器的 processors（需 Java）
+        if profile.has_client_processors() {
+            let java = crate::forge::locate_java(spec.java_path.as_deref()).ok_or_else(|| {
+                EngineError::Custom(
+                    "未找到可用的 Java（Forge 安装需要）。请在设置页配置 Java 路径。".into(),
+                )
+            })?;
+            if !crate::forge::java_works(&java).await {
+                return Err(EngineError::Custom(format!(
+                    "Java 无法运行：{}",
+                    java.display()
+                )));
+            }
+            let work_dir = installer
+                .parent()
+                .map(|p| p.join("work"))
+                .unwrap_or_else(std::env::temp_dir);
+            let pctx = crate::forge::ProcessorCtx {
+                game_dir: &game_dir,
+                installer: &installer,
+                work_dir: &work_dir,
+                data: &profile.data,
+                mc_version: &profile.minecraft,
+            };
+            let rt2 = rt.clone();
+            crate::forge::run_client_processors(&java, &profile, &pctx, cancel, &|step| {
+                rt2.set_current_file(&format!("Forge: {step}"));
+            })
+            .await?;
+        }
+    }
+
+    // ---- 阶段 6：natives 解压 + legacy 虚拟拷贝 ----
     rt.set_stage(Stage::Verifying);
     let _ = events_tx
         .send(rt.snapshot(base, TaskStatus::Running, None))

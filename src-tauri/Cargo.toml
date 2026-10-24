@@ -1,9 +1,9 @@
 [package]
-name = "mc-downloader-gui"
+name = "unknown-minecraft-down"
 version = "0.1.0"
 edition = "2021"
 description = "Minecraft Java 版仅下载器（Tauri v2 桌面应用）"
-default-run = "mc-downloader-gui"
+default-run = "unknown-minecraft-down"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

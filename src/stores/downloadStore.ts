@@ -18,6 +18,7 @@ interface DownloadState {
     gameDir: string,
     mirror: Mirror,
     concurrency: number,
+    javaPath?: string | null,
   ) => Promise<string>;
   cancelTask: (taskId: string) => Promise<void>;
   pauseTask: (taskId: string) => Promise<void>;
@@ -57,12 +58,13 @@ export const useDownloadStore = create<DownloadState>()((set, get) => ({
     });
   },
 
-  startTask: async (source, displayId, gameDir, mirror, concurrency) => {
+  startTask: async (source, displayId, gameDir, mirror, concurrency, javaPath) => {
     const taskId = await invoke<string>("start_download", {
       source,
       gameDir,
       mirror,
       concurrency,
+      javaPath: javaPath ?? null,
     });
     // 立即插入一个 queued 快照，等待引擎事件接管
     get().applySnapshot({

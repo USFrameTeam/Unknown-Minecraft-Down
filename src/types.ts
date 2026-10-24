@@ -15,6 +15,7 @@ export type Stage =
   | "version_json"
   | "libraries"
   | "assets"
+  | "forge"
   | "verifying"
   | "finished";
 
@@ -46,10 +47,21 @@ export interface TaskSnapshot {
 
 export type VersionSource =
   | { id: string }
-  | { mcVersion: string; loaderVersion: string };
+  | { mcVersion: string; loaderVersion: string }
+  | { mcVersion: string; forgeVersion: string; branch?: string | null };
 
 export interface FabricLoaderSummary {
   loader: { version: string; stable: boolean };
+}
+
+export interface ForgeBuildSummary {
+  mcVersion: string;
+  forgeVersion: string;
+  branch?: string | null;
+  artifactId: string;
+  versionId: string;
+  build: number;
+  modified: string;
 }
 
 export interface ReportEntry {
@@ -72,7 +84,11 @@ export interface VerificationReport {
 
 export interface AppSettings {
   onboarded: boolean;
+  /** @deprecated 旧单目录字段（仅兼容读取） */
   gameDir?: string | null;
+  gameDirs: string[];
+  activeGameDir?: string | null;
   mirror: Mirror;
   concurrency: number;
+  javaPath?: string | null;
 }

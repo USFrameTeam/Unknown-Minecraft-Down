@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { cn } from "../../lib/cn";
 import { Button } from "./button";
 
-// 轻量确认对话框（破坏性操作二次确认）
+// 轻量确认对话框（破坏性操作二次确认）— MC 风格
 export function ConfirmDialog({
   open,
   title,
@@ -34,17 +34,17 @@ export function ConfirmDialog({
   if (!open) return null;
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
       data-testid="confirm-dialog"
     >
-      <div className="w-full max-w-md rounded-lg border bg-card p-6 shadow-xl">
-        <h2 className="text-base font-semibold">{title}</h2>
+      <div className="mc-panel w-full max-w-md p-6">
+        <h2 className="mc-pixel text-[13px] font-bold">{title}</h2>
         {description && (
-          <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
+          <p className="mt-3 whitespace-pre-wrap text-sm text-muted-foreground">
             {description}
           </p>
         )}
-        <div className="mt-6 flex justify-end gap-2">
+        <div className="mt-6 flex justify-end gap-3">
           <Button variant="outline" onClick={onCancel}>
             {cancelText}
           </Button>
@@ -72,10 +72,8 @@ export function Modal({
 }) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4">
-      <div className={cn("w-full max-w-lg rounded-lg border bg-card shadow-xl", className)}>
-        {children}
-      </div>
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 p-4">
+      <div className={cn("mc-panel w-full max-w-lg", className)}>{children}</div>
     </div>
   );
 }
