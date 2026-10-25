@@ -162,7 +162,9 @@ async fn neoforge_installer_parses() {
     let mirror = Mirror::Bmclapi;
     let cancel = CancellationToken::new();
 
-    let vs = fetch_neoforge_versions(&client, mirror, "1.20.4").await.unwrap();
+    let vs = fetch_neoforge_versions(&client, mirror, "1.20.4")
+        .await
+        .unwrap();
     assert!(!vs.is_empty(), "1.20.4 应有稳定 NeoForge 版本");
     let latest = vs[0].clone();
 
@@ -173,10 +175,17 @@ async fn neoforge_installer_parses() {
             .unwrap();
     assert_eq!(entry.json.id, format!("neoforge-{latest}"));
     assert_eq!(entry.json.inherits_from.as_deref(), Some("1.20.4"));
-    assert!(profile.has_client_processors(), "20.4 应含 client processors");
+    assert!(
+        profile.has_client_processors(),
+        "20.4 应含 client processors"
+    );
     assert!(installer.exists());
 
     let jobs = profile_library_jobs(&profile, mirror, mirror.neoforge_maven_base()).unwrap();
-    assert!(jobs.len() > 100, "profile 库应超过 100 项，实际 {}", jobs.len());
+    assert!(
+        jobs.len() > 100,
+        "profile 库应超过 100 项，实际 {}",
+        jobs.len()
+    );
     assert!(jobs.iter().all(|j| j.url.starts_with("https://")));
 }
