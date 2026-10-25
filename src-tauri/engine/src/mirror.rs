@@ -49,6 +49,14 @@ impl Mirror {
         }
     }
 
+    /// NeoForge 官方 maven 基地址。
+    pub fn neoforge_maven_base(&self) -> &'static str {
+        match self {
+            Mirror::Official => "https://maven.neoforged.net/",
+            Mirror::Bmclapi => "https://bmclapi2.bangbang93.com/maven/",
+        }
+    }
+
     /// 把任一 MC 资源 URL 映射到当前镜像，并将 `http://` 强制升级为 `https://`。
     /// 环回地址（测试/自动化端点）豁免强制升级。
     pub fn map_url(&self, raw: &str) -> Result<String> {
@@ -89,6 +97,12 @@ pub fn rewrite_to_bmclapi(url: &str) -> String {
         )
         .replace("https://libraries.minecraft.net", &format!("{BMCL}/maven"))
         .replace("https://maven.minecraftforge.net", &format!("{BMCL}/maven"))
+        // NeoForge 官方带 /releases/ 段，BMCLAPI 镜像不带，需先处理长前缀
+        .replace(
+            "https://maven.neoforged.net/releases/",
+            &format!("{BMCL}/maven/"),
+        )
+        .replace("https://maven.neoforged.net/", &format!("{BMCL}/maven/"))
 }
 
 #[cfg(test)]
@@ -175,6 +189,23 @@ mod tests {
         assert_eq!(
             m.map_url("https://maven.fabricmc.net/net/fabricmc/fabric-loader/0.16.9/fabric-loader-0.16.9.jar").unwrap(),
             "https://maven.fabricmc.net/net/fabricmc/fabric-loader/0.16.9/fabric-loader-0.16.9.jar"
+        );
+    }
+
+    #[test]
+    fn bmclapi_rewrites_neoforge_maven() {
+        let m = Mirror::Bmclapi;
+        assert_eq!(
+            m.map_url("https://maven.neoforged.net/releases/net/neoforged/neoforge/20.4.237/neoforge-20.4.237-universal.jar").unwrap(),
+            "https://bmclapi2.bangbang93.com/maven/net/neoforged/neoforge/20.4.237/neoforge-20.4.237-universal.jar"
+        );
+        assert_eq!(
+            Mirror::Official.neoforge_maven_base(),
+            "https://maven.neoforged.net/"
+        );
+        assert_eq!(
+            Mirror::Bmclapi.neoforge_maven_base(),
+            "https://bmclapi2.bangbang93.com/maven/"
         );
     }
 

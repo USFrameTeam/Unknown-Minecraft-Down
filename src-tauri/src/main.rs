@@ -26,6 +26,8 @@ fn main() {
             commands::download::list_versions,
             commands::download::list_fabric_loaders,
             commands::download::list_forge_builds,
+            commands::download::list_neoforge_versions,
+            commands::download::auto_resume_pending,
             commands::download::start_download,
             commands::download::cancel_download,
             commands::download::pause_download,

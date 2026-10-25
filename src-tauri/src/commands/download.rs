@@ -127,6 +127,7 @@ pub fn register_task(
         spec: spec.clone(),
         cancel: tokio_util::sync::CancellationToken::new(),
         pause_requested: std::sync::atomic::AtomicBool::new(false),
+        auto_resume: std::sync::atomic::AtomicBool::new(false),
         snapshot: std::sync::RwLock::new(TaskSnapshot {
             task_id: task_id.clone(),
             version_id: spec.version_id.clone(),
@@ -271,6 +272,23 @@ pub async fn verify_installation(
     mirror: Mirror,
 ) -> Result<VerificationReport, AppError> {
     Ok(engine_verify(mirror, std::path::Path::new(&game_dir), &version_id).await?)
+}
+
+/// 前端就绪后调用：续跑上次会话仍在运行的任务（启动提速：不在 setup 里跑）。
+#[tauri::command]
+pub fn auto_resume_pending(app: AppHandle, state: State<'_, AppState>) -> Result<usize, AppError> {
+    Ok(state.auto_resume_pending(&app))
+}
+
+/// NeoForge 稳定版本列表（降序）。
+#[tauri::command]
+pub async fn list_neoforge_versions(
+    state: State<'_, AppState>,
+    mc_version: String,
+) -> Result<Vec<String>, AppError> {
+    let mirror = state.settings.read().unwrap().mirror;
+    let client = build_http_client()?;
+    Ok(mc_dl_engine::forge::fetch_neoforge_versions(&client, mirror, &mc_version).await?)
 }
 
 fn get_entry(state: &AppState, task_id: &str) -> Result<Arc<TaskEntry>, AppError> {

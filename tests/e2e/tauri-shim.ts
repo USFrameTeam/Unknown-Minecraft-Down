@@ -16,6 +16,8 @@ export function installTauriShim(fixtures: {
     paused: string[];
     resumed: string[];
     savedSettings: unknown[];
+    windowOps: string[];
+    autoResumed: number;
   } = {
     settings: fixtures.settings as Record<string, unknown>,
     started: [],
@@ -23,6 +25,8 @@ export function installTauriShim(fixtures: {
     paused: [],
     resumed: [],
     savedSettings: [],
+    windowOps: [],
+    autoResumed: -1,
   };
 
   function mockInvoke(cmd: string, args: Record<string, unknown>): unknown {
@@ -82,6 +86,11 @@ export function installTauriShim(fixtures: {
         return String(args.path);
       case "detect_java":
         return "/opt/java/bin/java";
+      case "list_neoforge_versions":
+        return ["20.4.253", "20.4.237"];
+      case "auto_resume_pending":
+        mock.autoResumed += 1;
+        return 0;
       case "verify_installation":
         return {
           versionId: args.versionId,
@@ -119,6 +128,12 @@ export function installTauriShim(fixtures: {
         return nextId++;
       }
       if (cmd === "plugin:event|unlisten") return null;
+      // 窗口操作（无边框标题栏按钮 / 就绪后显示）
+      const win = cmd.match(/^plugin:window\|(minimize|close|show|startDragging)$/);
+      if (win) {
+        mock.windowOps.push(win[1]);
+        return null;
+      }
       return mockInvoke(cmd, args ?? {});
     },
   };

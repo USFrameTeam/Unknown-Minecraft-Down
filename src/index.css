@@ -296,6 +296,24 @@
     box-shadow: inset 2px 2px 0 0 var(--mc-bevel-light);
   }
 
+  /* ---- 标题栏窗口按钮 ---- */
+  .mc-winbtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(180deg, #4a4a4e 0%, #38383c 100%);
+    border-left: 2px solid var(--mc-border);
+    box-shadow:
+      inset 1px 1px 0 0 rgba(255, 255, 255, 0.18),
+      inset -1px -1px 0 0 rgba(0, 0, 0, 0.45);
+    cursor: pointer;
+  }
+  .mc-winbtn:active {
+    box-shadow:
+      inset -1px -1px 0 0 rgba(255, 255, 255, 0.12),
+      inset 1px 1px 0 0 rgba(0, 0, 0, 0.5);
+  }
+
   /* ---- 黄字闪烁提示（MC splash text 风格） ---- */
   .mc-splash {
     color: var(--mc-yellow);

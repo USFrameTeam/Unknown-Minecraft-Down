@@ -22,7 +22,7 @@ const TYPE_LABELS: Record<string, string> = {
   old_alpha: "旧 Alpha",
 };
 
-type SourceTab = "vanilla" | "fabric" | "forge";
+type SourceTab = "vanilla" | "fabric" | "forge" | "neoforge";
 
 export function VersionPicker() {
   const mirror = useAppStore((s) => s.mirror);
@@ -50,6 +50,13 @@ export function VersionPicker() {
   const [buildPick, setBuildPick] = useState<ForgeBuildSummary | null>(null);
   const [forgeLoading, setForgeLoading] = useState(false);
   const [confirmForge, setConfirmForge] = useState(false);
+
+  // NeoForge
+  const [nfMc, setNfMc] = useState("");
+  const [nfVersions, setNfVersions] = useState<string[]>([]);
+  const [nfPick, setNfPick] = useState("");
+  const [nfLoading, setNfLoading] = useState(false);
+  const [confirmNf, setConfirmNf] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -122,6 +129,34 @@ export function VersionPicker() {
     };
   }, [tab, forgeMc]);
 
+  useEffect(() => {
+    if (tab !== "neoforge" || !nfMc) {
+      setNfVersions([]);
+      setNfPick("");
+      return;
+    }
+    let cancelled = false;
+    setNfLoading(true);
+    invoke<string[]>("list_neoforge_versions", { mcVersion: nfMc })
+      .then((vs) => {
+        if (cancelled) return;
+        setNfVersions(vs);
+        setNfPick(vs[0] ?? "");
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setNfVersions([]);
+          toast(`获取 NeoForge 版本列表失败: ${e}`, "error");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setNfLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, nfMc]);
+
   const releaseVersions = useMemo(
     () => versions.filter((v) => v.type === "release"),
     [versions],
@@ -180,6 +215,24 @@ export function VersionPicker() {
     });
   }
 
+  function startNeoForge() {
+    if (!nfMc || !nfPick) return;
+    withDir((dir) => {
+      const displayId = `neoforge-${nfPick}`;
+      startTask(
+        { mcVersion: nfMc, neoforgeVersion: nfPick },
+        displayId,
+        dir,
+        mirror,
+        concurrency,
+        javaPath,
+      )
+        .then(() => toast(`已加入下载队列：${displayId}`, "success"))
+        .catch((e) => toast(String(e), "error"));
+      setConfirmNf(false);
+    });
+  }
+
   const startTask = useDownloadStore((s) => s.startTask);
   const withDir = useWithActiveDir();
 
@@ -192,6 +245,7 @@ export function VersionPicker() {
               ["vanilla", "原版"],
               ["fabric", "Fabric"],
               ["forge", "Forge"],
+              ["neoforge", "NeoForge"],
             ] as [SourceTab, string][]
           ).map(([t, label]) => (
             <button
@@ -279,7 +333,7 @@ export function VersionPicker() {
               下载 Fabric 版
             </Button>
           </>
-        ) : (
+        ) : tab === "forge" ? (
           <>
             <Select
               value={forgeMc}
@@ -320,6 +374,46 @@ export function VersionPicker() {
             </Button>
             {forgeLoading && (
               <span className="text-xs text-[var(--mc-text-dim)]">加载构建列表…</span>
+            )}
+          </>
+        ) : (
+          <>
+            <Select
+              value={nfMc}
+              onChange={(e) => setNfMc(e.target.value)}
+              className="w-44"
+              data-testid="neoforge-mc-select"
+            >
+              <option value="">选择游戏版本…</option>
+              {releaseVersions.slice(0, 120).map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.id}
+                </option>
+              ))}
+            </Select>
+            <Select
+              value={nfPick}
+              onChange={(e) => setNfPick(e.target.value)}
+              disabled={!nfVersions.length}
+              className="w-48"
+              data-testid="neoforge-ver-select"
+            >
+              {nfVersions.map((v) => (
+                <option key={v} value={v}>
+                  NeoForge {v}
+                </option>
+              ))}
+            </Select>
+            <Button
+              variant="primary"
+              disabled={!nfPick}
+              onClick={() => setConfirmNf(true)}
+              data-testid="neoforge-download"
+            >
+              下载 NeoForge 版
+            </Button>
+            {nfLoading && (
+              <span className="text-xs text-[var(--mc-text-dim)]">加载版本列表…</span>
             )}
           </>
         )}
@@ -382,6 +476,18 @@ export function VersionPicker() {
         </div>
       )}
 
+      {tab === "neoforge" && (
+        <div className="flex-1 overflow-auto px-4 pb-4 text-sm text-[var(--mc-text-dim)]">
+          <p>
+            NeoForge 安装复用官方安装器管线：下载安装器（maven 旁挂 SHA-1 校验）→
+            解析 profile → 下载依赖 → 以本机 Java 执行官方 processors 生成补丁客户端。
+          </p>
+          <p className="mt-2">
+            注意：安装期间需要可访问 Mojang 官方端点（下载官方映射）。
+          </p>
+        </div>
+      )}
+
       {tab === "forge" && (
         <div className="flex-1 overflow-auto px-4 pb-4 text-sm text-[var(--mc-text-dim)]">
           <p>
@@ -411,6 +517,14 @@ export function VersionPicker() {
         confirmText="开始下载"
         onCancel={() => setConfirmFabric(false)}
         onConfirm={startFabric}
+      />
+      <ConfirmDialog
+        open={confirmNf}
+        title={`下载 NeoForge ${nfPick}（${nfMc}）？`}
+        description={`将创建版本 neoforge-${nfPick}。安装会以本机 Java 执行官方安装器 processors（仅用于生成 NeoForge 文件，不会启动游戏）。`}
+        confirmText="开始下载"
+        onCancel={() => setConfirmNf(false)}
+        onConfirm={startNeoForge}
       />
       <ConfirmDialog
         open={confirmForge}

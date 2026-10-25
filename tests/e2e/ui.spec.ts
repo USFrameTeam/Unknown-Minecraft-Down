@@ -30,6 +30,48 @@ async function gotoWithShim(page: Page, fixtures: Record<string, unknown>) {
   await page.goto("/");
 }
 
+test("自定义标题栏：最小化与关闭按钮可用（无边框窗口）", async ({ page }) => {
+  await gotoWithShim(page, {
+    settings: ONBOARDED_SETTINGS,
+    versions: VERSIONS,
+    tasks: [],
+  });
+  await expect(page.getByTestId("titlebar")).toBeVisible();
+  await page.getByTestId("win-minimize").click();
+  await page.getByTestId("win-close").click();
+  const ops = await page.evaluate(
+    () => (window as unknown as { __mcMock: { windowOps: string[] } }).__mcMock.windowOps,
+  );
+  expect(ops).toContain("minimize");
+  expect(ops).toContain("close");
+  // 就绪后窗口 show（启动优化：避免白屏闪烁）
+  expect(ops).toContain("show");
+});
+
+test("NeoForge 选项卡：选版本 → 确认 → 发起任务（带 javaPath）", async ({ page }) => {
+  await gotoWithShim(page, {
+    settings: { ...ONBOARDED_SETTINGS, javaPath: "/opt/java/bin/java" },
+    versions: VERSIONS,
+    tasks: [],
+  });
+
+  await page.getByTestId("nav-versions").click();
+  await page.getByTestId("tab-neoforge").click();
+  await page.getByTestId("neoforge-mc-select").selectOption("1.20.1");
+  await expect(page.getByTestId("neoforge-ver-select")).toHaveValue("20.4.253");
+
+  await page.getByTestId("neoforge-download").click();
+  await expect(page.getByTestId("confirm-dialog")).toContainText("NeoForge 20.4.253");
+  await page.getByTestId("confirm-accept").click();
+
+  const started = await page.evaluate(
+    () => (window as unknown as { __mcMock: { started: Array<Record<string, unknown>> } }).__mcMock.started,
+  );
+  expect(started).toHaveLength(1);
+  expect(started[0].source).toEqual({ mcVersion: "1.20.1", neoforgeVersion: "20.4.253" });
+  expect(started[0].javaPath).toBe("/opt/java/bin/java");
+});
+
 test("未完成向导时强制引导，免责声明含替代方案说明", async ({ page }) => {
   await gotoWithShim(page, {
     settings: { onboarded: false, gameDirs: [], activeGameDir: null, mirror: "official", concurrency: 12, javaPath: null },

@@ -91,6 +91,10 @@ pub enum VersionSource {
         #[serde(default)]
         branch: Option<String>,
     },
+    NeoForge {
+        mc_version: String,
+        neoforge_version: String,
+    },
 }
 
 impl VersionSource {
@@ -111,6 +115,11 @@ impl VersionSource {
                 }
                 _ => format!("{mc_version}-forge-{forge_version}"),
             },
+            VersionSource::NeoForge {
+                neoforge_version, ..
+            } => {
+                format!("neoforge-{neoforge_version}")
+            }
         }
     }
 }
@@ -370,7 +379,14 @@ async fn run_inner(
     let _ = events_tx
         .send(rt.snapshot(base, TaskStatus::Running, None))
         .await;
-    let mut forge_hold: Option<(crate::forge::InstallProfile, std::path::PathBuf)> = None;
+    // Forge / NeoForge 共用安装器管线，差异在 maven 基地址与展示名
+    struct LoaderHold {
+        profile: crate::forge::InstallProfile,
+        installer: std::path::PathBuf,
+        lib_base: &'static str,
+        label: &'static str,
+    }
+    let mut loader_hold: Option<LoaderHold> = None;
     let entry = match &spec.source {
         VersionSource::Vanilla { id } => {
             load_or_fetch_version_json(&client, spec.mirror, &game_dir, id, &manifest_handle)
@@ -404,7 +420,31 @@ async fn run_inner(
                 cancel,
             )
             .await?;
-            forge_hold = Some((profile, installer));
+            loader_hold = Some(LoaderHold {
+                profile,
+                installer,
+                lib_base: spec.mirror.forge_maven_base(),
+                label: "Forge",
+            });
+            entry
+        }
+        VersionSource::NeoForge {
+            neoforge_version, ..
+        } => {
+            let (entry, profile, installer) = crate::forge::fetch_neoforge_version_entry(
+                &client,
+                spec.mirror,
+                neoforge_version,
+                &game_dir,
+                cancel,
+            )
+            .await?;
+            loader_hold = Some(LoaderHold {
+                profile,
+                installer,
+                lib_base: spec.mirror.neoforge_maven_base(),
+                label: "NeoForge",
+            });
             entry
         }
     };
@@ -423,9 +463,9 @@ async fn run_inner(
     // ---- 构建下载计划 ----
     let ctx = OsContext::detect();
     let mut plan = crate::plan::build_plan(&chain, spec.mirror, &ctx)?;
-    // Forge：安装器声明的库（processor 依赖等）并入下载计划
-    if let Some((profile, _)) = &forge_hold {
-        let extra = crate::forge::profile_library_jobs(profile, spec.mirror, &game_dir)?;
+    // Forge / NeoForge：安装器声明的库（processor 依赖等）并入下载计划
+    if let Some(hold) = &loader_hold {
+        let extra = crate::forge::profile_library_jobs(&hold.profile, spec.mirror, hold.lib_base)?;
         plan.total_bytes += extra.iter().filter_map(|j| j.size).sum::<u64>();
         plan.jobs.extend(extra);
     }
@@ -461,8 +501,14 @@ async fn run_inner(
     plan.virtual_copies = copies;
     run_jobs(asset_jobs, spec, rt, &game_dir, client.clone()).await?;
 
-    // ---- 阶段 5：Forge（内嵌产物提取 + processors，仅在 Forge 任务时）----
-    if let Some((profile, installer)) = forge_hold {
+    // ---- 阶段 5：Forge / NeoForge（内嵌产物提取 + processors）----
+    if let Some(hold) = loader_hold {
+        let LoaderHold {
+            profile,
+            installer,
+            lib_base: _,
+            label,
+        } = hold;
         rt.set_stage(Stage::Forge);
         let _ = events_tx
             .send(rt.snapshot(base, TaskStatus::Running, None))
@@ -500,8 +546,8 @@ async fn run_inner(
                 mc_version: &profile.minecraft,
             };
             let rt2 = rt.clone();
-            crate::forge::run_client_processors(&java, &profile, &pctx, cancel, &|step| {
-                rt2.set_current_file(&format!("Forge: {step}"));
+            crate::forge::run_client_processors(&java, &profile, &pctx, cancel, &move |step| {
+                rt2.set_current_file(&format!("{label}: {step}"));
             })
             .await?;
         }

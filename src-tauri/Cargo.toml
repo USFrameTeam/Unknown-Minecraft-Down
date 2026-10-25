@@ -1,6 +1,6 @@
 [package]
 name = "unknown-minecraft-down"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 description = "Minecraft Java 版仅下载器（Tauri v2 桌面应用）"
 default-run = "unknown-minecraft-down"

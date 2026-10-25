@@ -48,7 +48,8 @@ export interface TaskSnapshot {
 export type VersionSource =
   | { id: string }
   | { mcVersion: string; loaderVersion: string }
-  | { mcVersion: string; forgeVersion: string; branch?: string | null };
+  | { mcVersion: string; forgeVersion: string; branch?: string | null }
+  | { mcVersion: string; neoforgeVersion: string };
 
 export interface FabricLoaderSummary {
   loader: { version: string; stable: boolean };

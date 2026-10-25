@@ -21,6 +21,9 @@ pub struct TaskEntry {
     pub cancel: CancellationToken,
     /// 暂停时为 true：转发器据此把引擎的 Canceled 映射为 Paused
     pub pause_requested: AtomicBool,
+    /// 启动恢复时标记"上次会话仍在运行"，由前端就绪后调用 auto_resume_pending 续跑，
+    /// 避免开屏即发起网络风暴拖慢启动
+    pub auto_resume: AtomicBool,
     pub snapshot: RwLock<TaskSnapshot>,
 }
 
@@ -114,16 +117,34 @@ impl AppState {
         self.data_dir.join("downloads.json")
     }
 
-    /// 启动恢复：此前未结束的任务重建为 Paused；原本正在运行/排队/暂停的
-    /// 自动续跑。引擎按磁盘现状（已完成文件秒过、.part 断点续传）继续，
-    /// 进度不会归零。
-    pub fn bootstrap_from_disk(&self, app: &tauri::AppHandle) {
+    /// 前端就绪后调用：续跑上次会话仍在运行的任务（每任务回退到 AppHandle）。
+    pub fn auto_resume_pending(&self, app: &tauri::AppHandle) -> usize {
+        let entries: Vec<Arc<TaskEntry>> = self
+            .tasks
+            .lock()
+            .unwrap()
+            .values()
+            .filter(|e| {
+                e.auto_resume.load(std::sync::atomic::Ordering::SeqCst)
+                    && e.status() == TaskStatus::Paused
+            })
+            .cloned()
+            .collect();
+        let n = entries.len();
+        for e in entries {
+            e.auto_resume
+                .store(false, std::sync::atomic::Ordering::SeqCst);
+            crate::commands::download::run_entry(app, e);
+        }
+        n
+    }
+
+    /// 启动恢复：未结束任务全部重建为 Paused（不立即续跑）；
+    /// 上次为 Running/Queued 的任务标记 auto_resume，待前端就绪后由
+    /// `auto_resume_pending` 续跑。引擎按磁盘现状推进，进度不归零。
+    pub fn bootstrap_from_disk(&self) {
         let file = self.load_downloads();
         for record in file.tasks {
-            let resume_now = matches!(
-                record.status,
-                TaskStatus::Running | TaskStatus::Queued | TaskStatus::Paused
-            );
             let java_path = self.settings.read().unwrap().java_path.clone();
             let spec = TaskSpec {
                 version_id: record.version_id.clone(),
@@ -133,6 +154,7 @@ impl AppState {
                 concurrency: record.concurrency.clamp(1, 32),
                 java_path,
             };
+            let was_running = matches!(record.status, TaskStatus::Running | TaskStatus::Queued);
             match crate::commands::download::register_task(self, spec, record.task_id.clone()) {
                 Ok(entry) => {
                     {
@@ -141,9 +163,9 @@ impl AppState {
                         snap.downloaded_bytes = record.downloaded_bytes;
                         snap.total_bytes = record.total_bytes;
                     }
-                    if resume_now {
-                        crate::commands::download::run_entry(app, entry);
-                    }
+                    entry
+                        .auto_resume
+                        .store(was_running, std::sync::atomic::Ordering::SeqCst);
                 }
                 Err(e) => log::error!("恢复任务 {} 失败: {e}", record.task_id),
             }
@@ -165,5 +187,5 @@ pub fn bootstrap(app: tauri::AppHandle) {
     state.load_settings();
     app.manage(state);
     let state = app.state::<AppState>();
-    state.bootstrap_from_disk(&app);
+    state.bootstrap_from_disk();
 }

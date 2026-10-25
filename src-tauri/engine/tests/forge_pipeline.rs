@@ -91,7 +91,7 @@ async fn forge_modern_pipeline_produces_official_artifacts() {
     .unwrap();
 
     // ---- 3) profile 声明的库下载到 libraries/ ----
-    let jobs = profile_library_jobs(&profile, mirror, &game).unwrap();
+    let jobs = profile_library_jobs(&profile, mirror, "https://maven.minecraftforge.net/").unwrap();
     assert!(!jobs.is_empty());
     for job in &jobs {
         let dest = game.join(&job.dest);
@@ -150,4 +150,33 @@ async fn forge_modern_pipeline_produces_official_artifacts() {
         .await
         .unwrap();
     assert_eq!(actual, expect_sha, "自研管线的补丁产物必须与官方安装器一致");
+}
+
+#[tokio::test]
+#[ignore = "需要网络：NeoForge 版本列表 + 安装器解析（约 7MB，不执行 processors）"]
+async fn neoforge_installer_parses() {
+    use mc_dl_engine::forge::{
+        fetch_neoforge_version_entry, fetch_neoforge_versions, profile_library_jobs,
+    };
+    let client = build_http_client().unwrap();
+    let mirror = Mirror::Bmclapi;
+    let cancel = CancellationToken::new();
+
+    let vs = fetch_neoforge_versions(&client, mirror, "1.20.4").await.unwrap();
+    assert!(!vs.is_empty(), "1.20.4 应有稳定 NeoForge 版本");
+    let latest = vs[0].clone();
+
+    let tmp = tempfile::tempdir().unwrap();
+    let (entry, profile, installer) =
+        fetch_neoforge_version_entry(&client, mirror, &latest, tmp.path(), &cancel)
+            .await
+            .unwrap();
+    assert_eq!(entry.json.id, format!("neoforge-{latest}"));
+    assert_eq!(entry.json.inherits_from.as_deref(), Some("1.20.4"));
+    assert!(profile.has_client_processors(), "20.4 应含 client processors");
+    assert!(installer.exists());
+
+    let jobs = profile_library_jobs(&profile, mirror, mirror.neoforge_maven_base()).unwrap();
+    assert!(jobs.len() > 100, "profile 库应超过 100 项，实际 {}", jobs.len());
+    assert!(jobs.iter().all(|j| j.url.starts_with("https://")));
 }

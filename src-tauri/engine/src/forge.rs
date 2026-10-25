@@ -194,6 +194,22 @@ pub fn maven_artifact_path(coord: &str) -> String {
 // 安装器下载与读取
 // ---------------------------------------------------------------------------
 
+/// 下载安装器到缓存目录（带 SHA-1 校验），返回本地路径。URL 由调用方构造
+/// （Forge / NeoForge 各自的 maven 路径）。
+pub async fn fetch_installer_at(
+    client: &reqwest::Client,
+    url: &str,
+    file_name: &str,
+    expected_sha1: Option<&str>,
+    cache_dir: &Path,
+    cancel: &CancellationToken,
+) -> Result<PathBuf> {
+    tokio::fs::create_dir_all(cache_dir).await?;
+    let dest = cache_dir.join(file_name);
+    download_file(client, url, &dest, expected_sha1, None, cancel, &|_| {}).await?;
+    Ok(dest)
+}
+
 /// 下载 Forge 安装器（带 BMCLAPI 提供的 SHA-1 校验），返回本地路径。
 pub async fn fetch_installer(
     client: &reqwest::Client,
@@ -203,11 +219,16 @@ pub async fn fetch_installer(
     cache_dir: &Path,
     cancel: &CancellationToken,
 ) -> Result<PathBuf> {
-    tokio::fs::create_dir_all(cache_dir).await?;
     let url = forge_maven_url(mirror, artifact_id, "installer");
-    let dest = cache_dir.join(format!("forge-{artifact_id}-installer.jar"));
-    download_file(client, &url, &dest, expected_sha1, None, cancel, &|_| {}).await?;
-    Ok(dest)
+    fetch_installer_at(
+        client,
+        &url,
+        &format!("forge-{artifact_id}-installer.jar"),
+        expected_sha1,
+        cache_dir,
+        cancel,
+    )
+    .await
 }
 
 pub fn read_zip_entry(zip_path: &Path, entry: &str) -> Result<Vec<u8>> {
@@ -393,6 +414,139 @@ pub fn resolve_value(value: &str, ctx: &ProcessorCtx<'_>) -> Result<String> {
         return Ok(p.display().to_string());
     }
     Ok(value.to_string())
+}
+
+// ---------------------------------------------------------------------------
+// NeoForge（与 Forge 同构的安装器管线，差异仅在 maven 坐标与版本列表来源）
+// ---------------------------------------------------------------------------
+
+/// 版本目录 id，与官方安装器一致：`neoforge-20.4.237`。
+pub fn neoforge_version_id(nf_version: &str) -> String {
+    format!("neoforge-{nf_version}")
+}
+
+/// MC 版本 → NeoForge 版本前缀："1.20.4"→"20.4."、"1.21"→"21.0."。
+fn neoforge_prefix_for_mc(mc_version: &str) -> Option<String> {
+    let rest = mc_version.strip_prefix('1')?.strip_prefix('.')?;
+    let segs: Vec<&str> = rest.split('.').collect();
+    match segs.as_slice() {
+        [a, b] => Some(format!("{a}.{b}.")),
+        [a] => Some(format!("{a}.0.")),
+        _ => None,
+    }
+}
+
+/// 按点分段数值比较（"20.4.80" < "20.4.237" < "26.3.0.97"）。
+fn version_desc_cmp(a: &str, b: &str) -> std::cmp::Ordering {
+    let parse = |v: &str| -> Vec<u64> {
+        v.split('.')
+            .map(|s| s.parse::<u64>().unwrap_or(0))
+            .collect()
+    };
+    parse(a).cmp(&parse(b)).reverse()
+}
+
+/// 解析 maven-metadata.xml：返回该 MC 版本可用的稳定 NeoForge 版本（降序），
+/// 过滤 alpha/beta/snapshot 等带后缀版本与非数字段。
+pub fn parse_neoforge_metadata(xml: &str, mc_version: &str) -> Vec<String> {
+    let Some(prefix) = neoforge_prefix_for_mc(mc_version) else {
+        return Vec::new();
+    };
+    let mut out: Vec<String> = Vec::new();
+    for cap in xml.split("<version>").skip(1) {
+        let Some(v) = cap.split("</version>").next() else {
+            continue;
+        };
+        let v = v.trim();
+        if !v.starts_with(&prefix) || v.contains('-') || v.contains('+') {
+            continue;
+        }
+        if !v
+            .split('.')
+            .all(|s| !s.is_empty() && s.chars().all(|c| c.is_ascii_digit()))
+        {
+            continue;
+        }
+        out.push(v.to_string());
+    }
+    out.sort_by(|a, b| version_desc_cmp(a, b));
+    out.dedup();
+    out
+}
+
+/// 获取某 MC 版本的稳定 NeoForge 版本列表（降序）。
+pub async fn fetch_neoforge_versions(
+    client: &reqwest::Client,
+    mirror: Mirror,
+    mc_version: &str,
+) -> Result<Vec<String>> {
+    let url = mirror.map_url(
+        "https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml",
+    )?;
+    let xml = client
+        .get(&url)
+        .send()
+        .await?
+        .error_for_status()?
+        .text()
+        .await?;
+    Ok(parse_neoforge_metadata(&xml, mc_version))
+}
+
+/// NeoForge 安装器 URL。
+pub fn neoforge_installer_url(mirror: Mirror, nf_version: &str) -> String {
+    mirror
+        .map_url(&format!(
+            "https://maven.neoforged.net/releases/net/neoforged/neoforge/{nf_version}/neoforge-{nf_version}-installer.jar"
+        ))
+        .expect("常量 URL 必定合法")
+}
+
+/// 读取 NeoForge 版本入口（安装器 → profile + 内嵌 version.json）。
+/// 安装器哈希取 maven 旁挂的 `.sha1`；获取失败则跳过校验
+/// （产物最终仍以 PATCHED_SHA / outputs 校验兜底）。
+pub async fn fetch_neoforge_version_entry(
+    client: &reqwest::Client,
+    mirror: Mirror,
+    nf_version: &str,
+    _game_dir: &Path,
+    cancel: &CancellationToken,
+) -> Result<(ChainEntry, InstallProfile, PathBuf)> {
+    let cache = std::env::temp_dir()
+        .join("mc-downloader-neoforge")
+        .join(sanitize_component(nf_version));
+    let url = neoforge_installer_url(mirror, nf_version);
+    let expected = match client.get(format!("{url}.sha1")).send().await {
+        Ok(resp) if resp.status().is_success() => resp.text().await.ok().and_then(|t| {
+            let t = t.split_whitespace().next().unwrap_or("").to_string();
+            (!t.is_empty()).then_some(t)
+        }),
+        _ => None,
+    };
+    let installer = fetch_installer_at(
+        client,
+        &url,
+        &format!("neoforge-{nf_version}-installer.jar"),
+        expected.as_deref(),
+        &cache,
+        cancel,
+    )
+    .await?;
+    let profile_text = String::from_utf8(read_zip_entry(&installer, "install_profile.json")?)
+        .map_err(|_| EngineError::Custom("install_profile.json 不是有效 UTF-8".into()))?;
+    let profile = parse_profile(&profile_text)?;
+    let vjson = read_embedded_version_json(&installer, &profile)?;
+    let json: crate::version_json::VersionJson = serde_json::from_str(&vjson)?;
+    Ok((
+        ChainEntry {
+            json,
+            raw: Some(vjson),
+            source_url: None,
+            manifest_sha1: None,
+        },
+        profile,
+        installer,
+    ))
 }
 
 // ---------------------------------------------------------------------------
@@ -643,11 +797,11 @@ pub async fn fetch_forge_version_entry(
 }
 
 /// 供下载阶段使用：profile.libraries → FileJob 列表（processor 依赖库等）。
-/// 旧式无 url 的库默认走 Forge maven。
+/// 旧式无 url 的库默认走 `default_base`（Forge / NeoForge 各自的官方 maven）。
 pub fn profile_library_jobs(
     profile: &InstallProfile,
     mirror: Mirror,
-    _game_dir: &Path,
+    default_base: &str,
 ) -> Result<Vec<crate::plan::FileJob>> {
     use crate::plan::FileKind;
     use crate::version_json::{library_artifact_with_base, OsContext};
@@ -655,8 +809,7 @@ pub fn profile_library_jobs(
     let ctx = OsContext::detect();
     let mut jobs = Vec::new();
     for lib in &profile.libraries {
-        let Some(art) = library_artifact_with_base(lib, &ctx, None, mirror.forge_maven_base())?
-        else {
+        let Some(art) = library_artifact_with_base(lib, &ctx, None, default_base)? else {
             continue;
         };
         let Some(rel) = &art.path else { continue };
@@ -814,8 +967,10 @@ mod tests {
         .has_client_processors());
 
         // downloads.artifact 直接采用；无 url 的旧式库默认走 forge maven
-        let dir = tempfile::tempdir().unwrap();
-        let jobs_off = profile_library_jobs(&p, Mirror::Official, dir.path()).unwrap();
+        let _dir = tempfile::tempdir().unwrap();
+        let jobs_off =
+            profile_library_jobs(&p, Mirror::Official, "https://maven.minecraftforge.net/")
+                .unwrap();
         assert_eq!(jobs_off.len(), 2);
         assert_eq!(
             jobs_off[0].url,
@@ -833,7 +988,8 @@ mod tests {
             jobs_off[1].sha1.as_deref(),
             Some("c7d29380ddb38becad7c0819b5b325e43bca23f0")
         );
-        let jobs_bm = profile_library_jobs(&p, Mirror::Bmclapi, dir.path()).unwrap();
+        let jobs_bm =
+            profile_library_jobs(&p, Mirror::Bmclapi, "https://maven.minecraftforge.net/").unwrap();
         assert!(jobs_bm[0]
             .url
             .starts_with("https://bmclapi2.bangbang93.com/maven/"));
@@ -879,6 +1035,48 @@ mod tests {
     }
 
     #[test]
+    fn neoforge_metadata_parse_and_prefix() {
+        assert_eq!(neoforge_prefix_for_mc("1.20.4").as_deref(), Some("20.4."));
+        assert_eq!(neoforge_prefix_for_mc("1.21").as_deref(), Some("21.0."));
+        assert_eq!(neoforge_prefix_for_mc("1.26.3").as_deref(), Some("26.3."));
+        assert_eq!(neoforge_prefix_for_mc("22w13a"), None);
+
+        let xml = r#"<metadata><versioning><versions>
+<version>26.1.0.0-alpha.1+snapshot-1</version>
+<version>20.4.80</version>
+<version>20.4.237</version>
+<version>20.4.253</version>
+<version>21.1.264</version>
+<version>1.20.4-20.4.237</version>
+</versions></versioning></metadata>"#;
+        let vs = parse_neoforge_metadata(xml, "1.20.4");
+        assert_eq!(vs, vec!["20.4.253", "20.4.237", "20.4.80"]);
+        // 带后缀 / 其他 MC 前缀均被过滤
+        assert_eq!(parse_neoforge_metadata(xml, "1.21.1"), vec!["21.1.264"]);
+        assert_eq!(parse_neoforge_metadata(xml, "1.19.4"), Vec::<String>::new());
+        // 降序对 4 段版本同样成立
+        let vs26 = parse_neoforge_metadata(
+            "<version>26.3.0.97</version><version>26.3.0.9</version>",
+            "1.26.3",
+        );
+        assert_eq!(vs26, vec!["26.3.0.97", "26.3.0.9"]);
+    }
+
+    #[test]
+    fn neoforge_urls_and_ids() {
+        assert_eq!(neoforge_version_id("20.4.237"), "neoforge-20.4.237");
+        let u = neoforge_installer_url(Mirror::Bmclapi, "20.4.237");
+        assert_eq!(
+            u,
+            "https://bmclapi2.bangbang93.com/maven/net/neoforged/neoforge/20.4.237/neoforge-20.4.237-installer.jar"
+        );
+        assert_eq!(
+            neoforge_installer_url(Mirror::Official, "20.4.237"),
+            "https://maven.neoforged.net/releases/net/neoforged/neoforge/20.4.237/neoforge-20.4.237-installer.jar"
+        );
+    }
+
+    #[test]
     fn minecraft_jar_token_resolves_to_vanilla_client() {
         let dir = tempfile::tempdir().unwrap();
         let installer = dir.path().join("installer.jar");
@@ -898,7 +1096,8 @@ mod tests {
     fn safe_join_used_in_profile_library_jobs() {
         let dir = tempfile::tempdir().unwrap();
         let p = parse_profile(r#"{"libraries":[{"name":"a:b:1"}]}"#).unwrap();
-        let jobs = profile_library_jobs(&p, Mirror::Official, dir.path()).unwrap();
+        let jobs = profile_library_jobs(&p, Mirror::Official, "https://maven.minecraftforge.net/")
+            .unwrap();
         assert_eq!(jobs.len(), 1);
         assert!(jobs[0].dest.starts_with("libraries/"));
         let _ = safe_join(dir.path(), &jobs[0].dest).unwrap();
