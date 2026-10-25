@@ -5,7 +5,8 @@
 //! 职责边界（硬约束）：
 //! - 只做：解析版本清单、下载文件、按标准目录放置并校验；
 //! - 不做：启动游戏、生成 Java 启动参数、正版验证、登录、模组/整合包管理；
-//! - 全程不执行任何下载得到的可执行文件，且无任何进程启动调用。
+//! - 进程启动调用仅存在于 engine/src/forge.rs（Forge/NeoForge 官方安装器
+//!   processors，产品明确授权的唯一例外），本应用层无任何进程启动调用。
 
 mod commands;
 mod error;
@@ -15,11 +16,27 @@ mod state;
 
 pub use error::AppError;
 
+use tauri::Manager;
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             state::bootstrap(app.handle().clone());
+
+            // 窗口默认隐藏（避免启动白屏闪烁）。显示时机双保障：
+            // 1) 前端首帧渲染后 show（capabilities 已补 core:window:allow-show）；
+            // 2) 5 秒兜底（Rust 侧直接调用，不经过 IPC）：即使前端脚本
+            //    完全失败也强制显示窗口。
+            if let Some(win) = app.get_webview_window("main") {
+                let handle = win.app_handle().clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(5));
+                    if let Some(w) = handle.get_webview_window("main") {
+                        let _ = w.show();
+                    }
+                });
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

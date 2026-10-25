@@ -19,7 +19,7 @@ export function TitleBar() {
         UNKNOWN MINECRAFT DOWN
       </span>
       <span className="text-[10px] text-[var(--mc-text-dim)]" data-tauri-drag-region>
-        v0.3
+        v0.3.1
       </span>
       <div className="ml-auto flex h-full">
         <button

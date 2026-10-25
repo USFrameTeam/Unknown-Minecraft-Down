@@ -48,11 +48,13 @@ export default function App() {
   }, [applySnapshot]);
 
   // 启动优化：窗口默认隐藏（tauri.conf visible:false），
-  // 前端首帧渲染完成后显示，避免启动白屏闪烁；
-  // 上次会话仍在运行的任务延后到 UI 就绪后续跑，不阻塞启动。
+  // Rust 侧在 DOM 就绪时已显示；前端首帧后再 show 一次，
+  // 失败不静默（便于 dev 排障）。上次会话运行中的任务延后续跑。
   useEffect(() => {
     if (!ready) return;
-    getCurrentWindow().show().catch(() => {});
+    getCurrentWindow()
+      .show()
+      .catch((e) => console.warn("[window] show 失败（Rust 侧会兜底显示）:", e));
     const t = window.setTimeout(() => {
       if (useAppStore.getState().onboarded) {
         invoke("auto_resume_pending").catch(() => {});

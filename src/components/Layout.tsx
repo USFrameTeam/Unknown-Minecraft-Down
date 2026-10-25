@@ -101,7 +101,7 @@ export function Layout({
         ) : (
           <span className="text-[var(--mc-text-dim)]">就绪 · 没有正在进行的下载</span>
         )}
-        <span className="ml-auto text-[var(--mc-text-dim)]">Unknown Minecraft Down v0.3</span>
+        <span className="ml-auto text-[var(--mc-text-dim)]">Unknown Minecraft Down v0.3.1.1</span>
       </footer>
     </div>
   );

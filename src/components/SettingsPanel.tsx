@@ -181,7 +181,7 @@ export function SettingsPanel() {
             {DISCLAIMER_TEXT}
           </div>
           <p className="mt-3 text-[11px] text-[var(--mc-text-dim)]">
-            Unknown Minecraft Down v0.3 · Tauri v2 + React 19 · 下载源仅限 Mojang 官方 /
+            Unknown Minecraft Down v0.3.1.1 · Tauri v2 + React 19 · 下载源仅限 Mojang 官方 /
             BMCLAPI / Fabric Meta / Forge 官方 maven · 不收集任何账号信息
           </p>
         </section>
